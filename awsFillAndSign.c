@@ -12,7 +12,7 @@
                 
  STABLITY:  UNSTABLE as of 2016-11-22
             Be sure to compile with -DLIBROCK_UNSTABLE.
-            Check for updates at: https:// TODO
+            Check for updates at: https://github.com/forrestcavalier/awsFillAndSign
               
  SUPPORT:   Contact the author for commercial support and consulting at
             http://www.mibsoftware.com/
@@ -1496,7 +1496,7 @@ int main(int argc, char **argv)
 "\n"" LICENSE:   MIT (Free/OpenSource)"
 "\n" 
 "\n"" STABLITY:  UNSTABLE as of 2016-11-22"
-"\n""            Check for updates at: https:// TODO"
+"\n""            Check for updates at: https://github.com/forrestcavalier/awsFillAndSign"
 "\n"              
 "\n"" SUPPORT:   Contact the author for commercial support and consulting at"
 "\n""            http://www.mibsoftware.com/"
