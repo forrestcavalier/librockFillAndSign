@@ -479,26 +479,7 @@ PRIVATE const char *librock_awsSignature_parseRequest_(struct librock_awsRequest
             if (pRequest->bFormatCURL) {
                 if (!strncmp(pRead, "upload-file", countOptionName(pRead))) {
                     if (iPass == 0) {
-                        const char *pStart;
-                        struct librock_appendable aName;
                         pRequest->pVerb = "PUT";
-                        memset(&aName, '\0', sizeof(aName));
-                        
-                        pRead += countToValue(pRead);
-                        pStart = pRead;
-                        while (*pRead >= ' ' && *pRead != '\x22') {
-                            pRead++;
-                        }
-                        /* Pre allocate */
-                        aName.cb = (pRead+1)-pStart;
-                        aName.p = (char *) malloc(aName.cb);
-                        if (!aName.p) {
-                            return("E-208 malloc failed");
-                        }
-                        if (!librock_safeAppend0(&aName, pStart, pRead-pStart)) {
-                            return "E-296 would overflow pre-allocated block";
-                        }
-                        freeOnce((void **)&(aName.p));
                     }
                     goto skip_line;
                 } else if (!strncmp(pRead, "request", countOptionName(pRead))) {
@@ -1621,7 +1602,7 @@ int main(int argc, char **argv)
                 }
                 pErrorMessage = librock_fileSha256Contents(pBody, &mdContent32[0]);
                 if (pErrorMessage) {
-                    fprintf(stderr, "%s\n", pErrorMessage);
+                    fprintf(stderr, "%s for file '%s'\n", pErrorMessage, pBody);
                     return 7;
                 }
             } else {
@@ -1713,7 +1694,7 @@ int main(int argc, char **argv)
         }
         if (scanSignature) {
             /* Expect an upload-file or data= field in the request. */
-            char *pRead = pFilledRequest;
+            const char *pRead = pFilledRequest;
             while(pRead) {
                 if (countOptionName(pRead)==11 && !strncmp(pRead, "upload-file", 11)) {
                     char *fileName = 0;
@@ -1726,11 +1707,12 @@ int main(int argc, char **argv)
                         return 11;
                     }
                     memmove(fileName, pRead, nameLength );
-                    pRead[nameLength] = '\0';
+                    fileName[nameLength] = '\0';
 
                     pErrorMessage = librock_fileSha256Contents(fileName, &mdContent32[0]);
                     if (pErrorMessage) {
-                        fprintf(stderr, "%s\n", pErrorMessage);
+                        fprintf(stderr, "%s for file '%s'\n", pErrorMessage, fileName);
+                        fprintf(stderr, "I-1734 template expanded:\n%s\n", pFilledRequest);
                         return 12;
                     }
                     
