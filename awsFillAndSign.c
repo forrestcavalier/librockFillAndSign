@@ -143,6 +143,9 @@ Windows, and GCC on Linux and *BSD:
     #elif defined _MSC_VER
     #   define LIBROCK_WANT_STRCASE_FOR_MSC_VER
     #endif
+    #if defined _MSC_VER
+    #	define LIBROCK_WANT_GETENV_S_FOR_MSC_VER
+    #endif
 */
 #include <stdlib.h>
 #include <sys/types.h>
@@ -254,6 +257,7 @@ Windows, and GCC on Linux and *BSD:
 #endif
     PRIVATE void bToHex0(char *pWrite, unsigned char ch); /* To hexadecimal, avoid sprintf */
     PRIVATE void bToHex0_UC(char *pWrite, unsigned char ch); /* To upper case hexadecimal, avoid sprintf */
+    PRIVATE const char *copyFromEnv_s(const char *pName, char *pWrite, int cMax);
 
 /**************************************************************/
 //[[Predeclarations of functions from librock_sha256.c]]
@@ -752,14 +756,14 @@ PRIVATE const char *librock_awsSignature_canonicalQueryString_(struct librock_ap
         if (!pList) {
             return "E-680 malloc failed";
         }
-        pCopy = malloc(strlen(paParameter->p + iStartString)+1);
+        pCopy = malloc(strlen((char*)paParameter->p + iStartString)+1);
         if (!pCopy) {
             freeOnce((void **)&pList);
             return "E-683 malloc failed";
         }
         pFix = pCopy;
         
-        memmove(pCopy,paParameter->p + iStartString,strlen(paParameter->p + iStartString)+1);
+        memmove(pCopy, (char*)paParameter->p + iStartString,strlen((char*)paParameter->p + iStartString)+1);
         /* First turn '=' into spaces for easy sorting */
         while((pFix = strchr(pFix, '='))) {
             *pFix++ = ' ';
@@ -869,7 +873,7 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
     }
     
     /* No allocator in aParameter. Store pointers into the buffer, it won't move. */
-    pParameterList[1/*Verb*/] = aParameter.p + aParameter.iWriting;
+    pParameterList[1/*Verb*/] = (char*)aParameter.p + aParameter.iWriting;
     if (!librock_safeAppend0(&aParameter, pRequest->pVerb, countOptionName(pRequest->pVerb))) {
         freeOnce((void **) & aParameter.p);
         return "E-470 would overflow pre-allocated block";
@@ -881,7 +885,7 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
     aParameter.iWriting++; /* Retain the terminating \0. */
 
     /* Canonical URI */
-    pParameterList[2/*Canonical URI*/] = aParameter.p + aParameter.iWriting;
+    pParameterList[2/*Canonical URI*/] = (char*)aParameter.p + aParameter.iWriting;
     pRead = pRequest->pURI;
     if (!strncasecmp(pRead, "http:", 5) || !strncasecmp(pRead, "https:", 6)) {
         pRead = strchr(pRead, ':')+1;
@@ -913,7 +917,7 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
     }
 
     /* Canonical Query String. */
-    pParameterList[3/*Query String*/] = aParameter.p + aParameter.iWriting;
+    pParameterList[3/*Query String*/] = (char*)aParameter.p + aParameter.iWriting;
     if (*pRead == '?') {
         const char *pErrorMessage =librock_awsSignature_canonicalQueryString_(&aParameter,&pRead,pRequest->bFormatCURL);
         if (pErrorMessage) {
@@ -931,7 +935,7 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
     /* CanonicalHeaders */
     
     /* Sorted headers */
-    pParameterList[4/*Canonical Headers*/] = aParameter.p + aParameter.iWriting;
+    pParameterList[4/*Canonical Headers*/] = (char*)aParameter.p + aParameter.iWriting;
     if (pRequest->cHeaders) {
         const char *pHeader;
         int i = 0;
@@ -1027,7 +1031,7 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
     }
 
 
-    pParameterList[5/*Names of Signed Headers*/] = aParameter.p + aParameter.iWriting;
+    pParameterList[5/*Names of Signed Headers*/] = (char*)aParameter.p + aParameter.iWriting;
     /* All of the headers we have will be signed. If caller or proxies add
        headers later, they will not be signed. */
     {
@@ -1071,7 +1075,7 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
             freeOnce((void **) & aParameter.p);
             return "E-451 malloc failed";
         }
-        memmove(pRequest->pSignedHeaders, aParameter.p + iStart, cSigned);
+        memmove(pRequest->pSignedHeaders, (char*)aParameter.p + iStart, cSigned);
         pRequest->pSignedHeaders[cSigned] = '\0';
         
         /* Keep the \0 and start the next string*/
@@ -1634,39 +1638,43 @@ int main(int argc, char **argv)
     }
     if (credentialsFromEnv) {
         int iWrite = 0;
-        const char *src;
-        if (!getenv("AWS_ACCESS_KEY_ID")
-            ||!getenv("AWS_SECRET_ACCESS_KEY")
-            ||!getenv("AWS_DEFAULT_REGION")) {
-            fprintf(stderr, "%s\n", "E-1639 missing environment variable for -e");
-            return 13;
-        }
-        if (strlen(credentialsFromEnv) 
-            + strlen(getenv("AWS_ACCESS_KEY_ID"))
-            + strlen(getenv("AWS_SECRET_ACCESS_KEY"))
-            + strlen(getenv("AWS_DEFAULT_REGION"))
-            + 4 > sizeof(credentials)) {
-            fprintf(stderr, "%s\n", "E-1647 credentials environment variables too long");
+        const char *errorMessage;
+
+        errorMessage = copyFromEnv_s("AWS_DEFAULT_REGION", credentials+iWrite, sizeof(credentials) - iWrite);
+        if (errorMessage) {
+            fprintf(stderr, "%s\n", errorMessage);
             return 14;
         }
-        src = getenv("AWS_DEFAULT_REGION");
-        memmove(credentials+iWrite, src, strlen(src));
-        iWrite += strlen(src);
+        iWrite += strlen(credentials+iWrite);
+        if (iWrite + 1 + strlen(credentialsFromEnv) > sizeof(credentials)-2) {
+            fprintf(stderr, "%s\n", "I-1649 credentials would overflow fixed buffer");
+            return 15;
+        }
         credentials[iWrite++] = '/';
 
-        src = credentialsFromEnv;
-        memmove(credentials+iWrite, src, strlen(src));
-        iWrite += strlen(src);
+        /* service */
+        memmove(credentials+iWrite, credentialsFromEnv, strlen(credentialsFromEnv));
+        iWrite += strlen(credentialsFromEnv);
         credentials[iWrite++] = ',';
 
-        src = getenv("AWS_ACCESS_KEY_ID");
-        memmove(credentials+iWrite, src, strlen(src));
-        iWrite += strlen(src);
+        errorMessage = copyFromEnv_s("AWS_ACCESS_KEY_ID", credentials+iWrite, sizeof(credentials) - iWrite);
+        if (errorMessage) {
+            fprintf(stderr, "%s\n", errorMessage);
+            return 14;
+        }
+        iWrite += strlen(credentials+iWrite);
+        if (iWrite + 1 > sizeof(credentials)-2) {
+            fprintf(stderr, "%s\n", "I-1649 credentials would overflow fixed buffer");
+            return 15;
+        }
         credentials[iWrite++] = ',';
 
-        src = getenv("AWS_SECRET_ACCESS_KEY");
-        memmove(credentials+iWrite, src, strlen(src));
-        iWrite += strlen(src);
+        errorMessage = copyFromEnv_s("AWS_SECRET_ACCESS_KEY", credentials+iWrite, sizeof(credentials) - iWrite);
+        if (errorMessage) {
+            fprintf(stderr, "%s\n", errorMessage);
+            return 14;
+        }
+        iWrite += strlen(credentials+iWrite);
         credentials[iWrite++] = '\0';
         
     } else {
@@ -1867,13 +1875,13 @@ int main(int argc, char **argv)
             return 0;
         }
         if (pSource) {
-            memmove(pAppendable->p + pAppendable->iWriting, pSource, cSource);
+            memmove((char *)pAppendable->p + pAppendable->iWriting, pSource, cSource);
         } else { /* caller will write */
             *((char *)pAppendable->p + pAppendable->iWriting) = '\0';
         }
         pAppendable->iWriting += cSource;
         ((char *) pAppendable->p)[pAppendable->iWriting] = '\0';
-        return pAppendable->p + pAppendable->iWriting - cSource;
+        return (char *)pAppendable->p + pAppendable->iWriting - cSource;
     }
     PRIVATE void freeOnce(void **p)
     {
@@ -1897,6 +1905,34 @@ int main(int argc, char **argv)
         pWrite[1] = digits[(ch)&0x0f];
         pWrite[2] = '\0';
     }
+    PRIVATE const char *copyFromEnv_s(const char *pName, char *pWrite, int cMax)
+    {
+#if defined LIBROCK_WANT_GETENV_S_FOR_MSC_VER
+        size_t ret;
+        if (getenv_s(&ret, pWrite, cMax, pName)) {
+            return "E-1912 environment variable would overflow fixed buffer";
+        }
+        if (!ret) {
+            return "E-1915 environment variable not found";
+        }
+        return 0; //No Error
+#else
+        char *pRead = getenv(pName);
+        int length;
+        if (!pRead) {
+            return "E-1915 environment variable not found";
+        }
+        length = strlen(pRead);
+        if (length+1 > cMax) {
+            return "E-1912 environment variable would overflow fixed buffer";
+        }
+        memmove(pWrite, pRead, length);
+        pWrite[length] = '\0';
+        return 0; //No Error
+#endif
+        
+    }
+    
 PRIVATE char *librock_fillTemplate(char **ppFilled, const char *pTemplate, int argc, char * const * const argv)
 { //DEBUG: reuse
     int pass; //two passes.

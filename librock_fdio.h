@@ -1,3 +1,8 @@
+/* This is a compatibility and portability shim to help
+   write sources that are platform independent.
+   
+   More info at http://www.mibsoftware.com/
+ */
 #if defined __MINGW32__  && defined __MSVCRT__
 #	include <io.h>		// _sopen_s
 # if !defined LIBROCK_FDIO_DEFINED

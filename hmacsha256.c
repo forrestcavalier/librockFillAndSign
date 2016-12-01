@@ -1,4 +1,8 @@
 /* hmacsha256.c Copyright 2016 MIB SOFTWARE, INC.
+Part of libROCK by MIB SOFTWARE:
+- MIT License
+- High-Quality. Highly portable. Compiles on gcc/MSVC/Clang/Windows/Linux/BSD/more.
+- Global names start "librock_", for compatibility.
 
 *******************************************************************************
 [[The MIT License]]
