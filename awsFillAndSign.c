@@ -228,7 +228,7 @@ Windows, and GCC on Linux and *BSD:
                         const char *pToSign);
      
     /* Utility functions in this module */
-    PRIVATE char *librock_fillTemplate(
+    PRIVATE const char *librock_fillTemplate(
                         char **ppFilled,
                         const char *pTemplate,
                         int argc,
@@ -243,12 +243,20 @@ Windows, and GCC on Linux and *BSD:
         void *p;
         int cb;
         int iWriting;
-        void (*realloc)(void *, size_t);
+        void *(*realloc)(void *, size_t);
     };
+    PRIVATE char *librock_appendableSet(struct librock_appendable *pAppendable,
+            void *p,
+            int cb,
+            void *(*realloc)(void *, size_t)
+            );
     PRIVATE char *librock_safeAppend0(
                         struct librock_appendable *pAppendable,
                         const char *pSource,
                         int cSource);
+    PRIVATE char *librock_safeAppendEnv0(
+                        struct librock_appendable *pAppendable,
+                        const char *pName);
     
     PRIVATE void freeOnce(void **pp); /* free() a pointer and then set it NULL */
 #ifdef LIBROCK_AWSFILLANDSIGN_MAIN
@@ -256,8 +264,7 @@ Windows, and GCC on Linux and *BSD:
     PRIVATE void *librock_fileGetContents(const char *fname); /* allocate memory, read entire file */
 #endif
     PRIVATE void bToHex0(char *pWrite, unsigned char ch); /* To hexadecimal, avoid sprintf */
-    PRIVATE void bToHex0_UC(char *pWrite, unsigned char ch); /* To upper case hexadecimal, avoid sprintf */
-    PRIVATE const char *copyFromEnv_s(const char *pName, char *pWrite, int cMax);
+    PRIVATE void bToUHex0(char *pWrite, unsigned char ch); /* To upper case hexadecimal, avoid sprintf */
 
 /**************************************************************/
 //[[Predeclarations of functions from librock_sha256.c]]
@@ -685,7 +692,7 @@ PRIVATE const char *librock_awsSignature_canonicalQueryString_(struct librock_ap
                 if (!librock_safeAppend0(paParameter, "%XX", 3)) { 
                     return "E-601 would overflow pre-allocated block";
                 }
-                bToHex0_UC((char *) paParameter->p + paParameter->iWriting-2, ch & 0xff);
+                bToUHex0((char *) paParameter->p + paParameter->iWriting-2, ch & 0xff);
             }
             pSource += 3;
             startChunk = pSource;
@@ -711,7 +718,7 @@ PRIVATE const char *librock_awsSignature_canonicalQueryString_(struct librock_ap
             if (!librock_safeAppend0(paParameter, "%XX", 3)) { 
                 return "E-601 would overflow pre-allocated block";
             }
-            bToHex0_UC((char *) paParameter->p + paParameter->iWriting-2, *pSource & 0xff);
+            bToUHex0((char *) paParameter->p + paParameter->iWriting-2, *pSource & 0xff);
             pSource++;
             startChunk = pSource;
         }
@@ -730,27 +737,31 @@ PRIVATE const char *librock_awsSignature_canonicalQueryString_(struct librock_ap
     
     if (cParameters > 1) { /*sort*/
         char **pList = 0;
-        char *pCopy = 0;
+        struct librock_appendable aCopy;
         char *pFix;
         int i = 0;
         pList = malloc(cParameters * sizeof(char *));
         if (!pList) {
             return "E-680 malloc failed";
         }
-        pCopy = malloc(strlen((char*)paParameter->p + iStartString)+1);
-        if (!pCopy) {
+        librock_appendableSet(&aCopy, 0, 0, 0);
+        aCopy.cb = strlen((char*)paParameter->p + iStartString) + 1;
+        aCopy.p = malloc(aCopy.cb);
+        if (!aCopy.p) {
             freeOnce((void **)&pList);
             return "E-683 malloc failed";
         }
-        pFix = pCopy;
+        if (!librock_safeAppend0(&aCopy, (char*)paParameter->p + iStartString, strlen((char*)paParameter->p + iStartString))) {
+            return "E-601 would overflow pre-allocated block";
+        }
+        pFix = aCopy.p;
         
-        memmove(pCopy, (char*)paParameter->p + iStartString,strlen((char*)paParameter->p + iStartString)+1);
         /* First turn '=' into spaces for easy sorting */
         while((pFix = strchr(pFix, '='))) {
             *pFix++ = ' ';
         }
         /* Now build a list, splitting at '&' */
-        pFix = pCopy;
+        pFix = aCopy.p;
         while(pFix) {
             pList[i++] = pFix;
             pFix = strchr(pFix,'&');
@@ -781,7 +792,7 @@ PRIVATE const char *librock_awsSignature_canonicalQueryString_(struct librock_ap
             *pFix++ = '=';
         }
         freeOnce((void **)&pList);
-        freeOnce((void *)&pCopy);
+        freeOnce((void *)&(aCopy.p));
     }
     return 0;
 } /* librock_awsSignature_canonicalQueryString_ */
@@ -829,7 +840,7 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
     /* Build the Canonical Request. */
     /* We are going to build stringtosignbytes afto digest with hmac-sha256 */
 
-    memset(&aParameter, '\0', sizeof(aParameter));
+    librock_appendableSet(&aParameter, 0, 0, 0);
     if (*ppToSign != 0) {
         /* We are going to overwrite if successful. Caller needs to initialize to 0. */
         return "E-775 Invalid parameter";
@@ -1527,7 +1538,7 @@ int main(int argc, char **argv)
                 }
                 return 0;
             } else if (!strcmp(argv[argumentIndex], "--write")) {
-                /* write template */
+                /* write unfilled template */
                
                 if (argumentIndex >= argc) {
                     fprintf(stderr, "Usage: awsFillAndSign [-v][-b fileBodyToSign] -t template.txt param1 param2 param3\nTry --help.");
@@ -1613,50 +1624,50 @@ int main(int argc, char **argv)
         }
     }
 
-    if (argumentIndex >= argc) {
+    if (argumentIndex > argc) {
         fprintf(stderr, "Usage: awsFillAndSign [-v][-b fileBodyToSign] -t template.txt param1 param2 param3\nTry --help.");
         return -1;
     }
     if (credentialsFromEnv) {
-        int iWrite = 0;
-        const char *errorMessage;
+        struct librock_appendable aCredentials;
 
-        errorMessage = copyFromEnv_s("AWS_DEFAULT_REGION", credentials+iWrite, sizeof(credentials) - iWrite);
-        if (errorMessage) {
-            fprintf(stderr, "%s\n", errorMessage);
+        librock_appendableSet(&aCredentials, credentials, sizeof(credentials), 0);
+
+        /* region */
+        if (!librock_safeAppendEnv0(&aCredentials, "AWS_DEFAULT_REGION")) {
+            fprintf(stderr, "%s\n", "I-1649 credentials would overflow fixed buffer");
             return 14;
         }
-        iWrite += strlen(credentials+iWrite);
-        if (iWrite + 1 + strlen(credentialsFromEnv) > sizeof(credentials)-2) {
+        if (!librock_safeAppend0(&aCredentials, "/", 1)) {
             fprintf(stderr, "%s\n", "I-1649 credentials would overflow fixed buffer");
-            return 15;
+            return 14;
         }
-        credentials[iWrite++] = '/';
 
         /* service */
-        memmove(credentials+iWrite, credentialsFromEnv, strlen(credentialsFromEnv));
-        iWrite += strlen(credentialsFromEnv);
-        credentials[iWrite++] = ',';
-
-        errorMessage = copyFromEnv_s("AWS_ACCESS_KEY_ID", credentials+iWrite, sizeof(credentials) - iWrite);
-        if (errorMessage) {
-            fprintf(stderr, "%s\n", errorMessage);
-            return 14;
-        }
-        iWrite += strlen(credentials+iWrite);
-        if (iWrite + 1 > sizeof(credentials)-2) {
+        if (!librock_safeAppend0(&aCredentials, credentialsFromEnv, -1)) {
             fprintf(stderr, "%s\n", "I-1649 credentials would overflow fixed buffer");
-            return 15;
-        }
-        credentials[iWrite++] = ',';
-
-        errorMessage = copyFromEnv_s("AWS_SECRET_ACCESS_KEY", credentials+iWrite, sizeof(credentials) - iWrite);
-        if (errorMessage) {
-            fprintf(stderr, "%s\n", errorMessage);
             return 14;
         }
-        iWrite += strlen(credentials+iWrite);
-        credentials[iWrite++] = '\0';
+        if (!librock_safeAppend0(&aCredentials, ",", 1)) {
+            fprintf(stderr, "%s\n", "I-1649 credentials would overflow fixed buffer");
+            return 14;
+        }
+        
+        /* Access Key ID */
+        if (!librock_safeAppendEnv0(&aCredentials, "AWS_ACCESS_KEY_ID")) {
+            fprintf(stderr, "%s\n", "I-1649 credentials would overflow fixed buffer");
+            return 14;
+        }
+        if (!librock_safeAppend0(&aCredentials, ",", 1)) {
+            fprintf(stderr, "%s\n", "I-1649 credentials would overflow fixed buffer");
+            return 14;
+        }
+
+        /* Secret */
+        if (!librock_safeAppendEnv0(&aCredentials, "AWS_SECRET_ACCESS_KEY")) {
+            fprintf(stderr, "%s\n", "I-1649 credentials would overflow fixed buffer");
+            return 14;
+        }
         
     } else {
         /* Get comma-separated credentials on stdin, which must have this form. Lengths may vary.
@@ -1838,23 +1849,50 @@ int main(int argc, char **argv)
         return *ppWrite - cSource;
     }
 #endif
-    PRIVATE char *librock_safeAppend0(struct librock_appendable *pAppendable, const char *pSource, int cSource)
-    { /* Bounds-checked memmove into a buffer. If out of bounds, do nothing and return 0.
-         Otherwise: memmove to *ppWrite, follow with a terminating '\0', and update the write position 
-         Return the first character written into the buffer.
+    PRIVATE char *librock_appendableSet(struct librock_appendable *pAppendable,
+            void *p,
+            int cb,
+            void *(*realloc)(void *, size_t)
+            ) {
+         pAppendable->p = p;
+         pAppendable->cb = cb;
+         pAppendable->iWriting = 0;
+         pAppendable->realloc = realloc;
+         if (realloc && !p) {
+            pAppendable->p = (*(pAppendable->realloc))(0, cb);
+         }
+         return pAppendable->p;
+    }
+
+    PRIVATE char *librock_safeAppend0(
+                    struct librock_appendable *pAppendable,
+                    const char *pSource,
+                    int cSource)
+    { /* If cSource == -1, set cSource = strlen(pSource).
+         If pAppendable->p is 0, increment pAppendable->cb by cSource.
+         Otherwise do bounds-checked memmove into a buffer. 
+            If out of bounds, do nothing and return 0.
+            Otherwise: memmove into buffer at the write position,
+            follow with a terminating '\0', and
+            update the write position.
+            Return the pointer to first character written into the buffer.
        */
         if (cSource == -1) {
             cSource = strlen(pSource);
         }
         if (cSource < 0) {
-            return 0;
+            return 0; // Invalid parameter.
+        }
+        if (! (pAppendable->p)) {
+            pAppendable->cb += cSource;
+            return (char *) 1;
         }
         if (pAppendable->iWriting < 0) { /* validate */
-            return 0;
+            return 0; // Caller incorrectly set iWriting.
         }
         if (pAppendable->iWriting + cSource + 1 > pAppendable->cb) { /* Will not fit with \0 terminator */
-            /* This implementation does not support realloc. */
-            return 0;
+            /* TODO: This implementation does not support realloc. */
+            return 0; // Would overflow.
         }
         if (pSource) {
             memmove((char *)pAppendable->p + pAppendable->iWriting, pSource, cSource);
@@ -1863,7 +1901,42 @@ int main(int argc, char **argv)
         }
         pAppendable->iWriting += cSource;
         ((char *) pAppendable->p)[pAppendable->iWriting] = '\0';
+        
         return (char *)pAppendable->p + pAppendable->iWriting - cSource;
+    }
+    PRIVATE char *librock_safeAppendEnv0(struct librock_appendable *pAppendable, const char *pName)
+    {
+#if defined LIBROCK_WANT_GETENV_S_FOR_MSC_VER
+        size_t ret;
+        if (getenv_s(&ret, pAppendable->p + pAppendable->iWriting,
+                    pAppendable->cb - pAppendable->iWriting, pName)) {
+            return 0; // Would overflow.
+        }
+        if (!ret) {
+            /* Environment variable not found */
+            ((char *)pAppendable->p)[pAppendable->iWriting] = '\0';
+            return pAppendable->p + pAppendable->iWriting;
+        }
+        pAppendable->iWriting += ret;
+        return pAppendable->p + pAppendable->iWriting;
+#else
+        char *pRead = getenv(pName);
+        int length;
+        if (!pRead) {
+            /* Environment variable not found */
+            ((char *)pAppendable->p)[pAppendable->iWriting] = '\0';
+            return pAppendable->p + pAppendable->iWriting;
+        }
+        length = strlen(pRead);
+        if (pAppendable->iWriting > pAppendable->cb - length - 1) {
+            return 0; // Would overflow.
+        }
+        memmove(pAppendable->p + pAppendable->iWriting, pRead, length);
+        pAppendable->iWriting += length;
+        ((char *)pAppendable->p)[pAppendable->iWriting] = '\0';
+        return pAppendable->p + pAppendable->iWriting;//No Error
+#endif
+        
     }
     PRIVATE void freeOnce(void **p)
     {
@@ -1880,51 +1953,86 @@ int main(int argc, char **argv)
         pWrite[2] = '\0';
     }
 
-    PRIVATE void bToHex0_UC(char *pWrite, unsigned char ch)
+    PRIVATE void bToUHex0(char *pWrite, unsigned char ch)
     {
         char *digits = "0123456789ABCDEF";
         *pWrite = digits[(ch>>4)&0x0f];
         pWrite[1] = digits[(ch)&0x0f];
         pWrite[2] = '\0';
     }
-    PRIVATE const char *copyFromEnv_s(const char *pName, char *pWrite, int cMax)
-    {
-#if defined LIBROCK_WANT_GETENV_S_FOR_MSC_VER
-        size_t ret;
-        if (getenv_s(&ret, pWrite, cMax, pName)) {
-            return "E-1912 environment variable would overflow fixed buffer";
+
+char *librock_safeAppendUriEncoded0(struct librock_appendable *pAppendable, const char *pSource, int cSource)
+{  /* If pAppendable->p is 0, increment pAppendable->cb for what is needed
+      to URI-encode cSource bytes of pSource.
+
+      Otherwise, bounds-checked URI-encode into a buffer, follow with a terminating
+      '\0', update the write position, and return a pointer to the first
+      character written. 
+      
+      If the buffer would overflow, reset the write position, and return 0.
+      
+    */
+    int cStartWriting = pAppendable->iWriting;
+    const char *pRead = pSource;
+    const char *pStart = pRead;
+    if (cSource == -1) {
+        cSource = strlen(pSource);
+    }
+    while(pRead < pSource + cSource) {
+        char ch = *pRead;
+        if ((ch >= '0' && ch <= '9')
+            ||(ch == '.')
+            ||(ch >= 'A' && ch <= 'Z')
+            ||(ch >= 'a' && ch <= 'z')
+            ||(ch == '-')
+            ||(ch == '_')
+            ||(ch == '~')) {
+            /* No URI-encoding required */
+            pRead++;
+        } else {
+            /* Need to encode */
+            
+            /* First, catch up on non-encoded characters */
+            if (pRead > pStart) {
+                if (!librock_safeAppend0(pAppendable, pStart, pRead - pStart)) {
+                    pAppendable->iWriting = cStartWriting;
+                    return 0;
+                }
+            }
+            
+            /* Ensure room */
+            if (!librock_safeAppend0(pAppendable, "%XX", 3)) {
+                pAppendable->iWriting = cStartWriting;
+                return 0;
+            }
+            if (pAppendable->p) {
+                bToUHex0((char *) pAppendable->p + pAppendable->iWriting-2, ch & 0xff);
+            }
+            pRead++;
+            pStart = pRead;
         }
-        if (!ret) {
-            return "E-1915 environment variable not found";
+    }
+    if (pRead > pStart) {
+        if (!librock_safeAppend0(pAppendable, pStart, pRead - pStart)) {
+            pAppendable->iWriting = cStartWriting;
+            return 0;
         }
-        return 0; //No Error
-#else
-        char *pRead = getenv(pName);
-        int length;
-        if (!pRead) {
-            return "E-1915 environment variable not found";
-        }
-        length = strlen(pRead);
-        if (length+1 > cMax) {
-            return "E-1912 environment variable would overflow fixed buffer";
-        }
-        memmove(pWrite, pRead, length);
-        pWrite[length] = '\0';
-        return 0; //No Error
-#endif
-        
     }
     
-PRIVATE char *librock_fillTemplate(char **ppFilled, const char *pTemplate, int argc, char * const * const argv)
+    return (char *)pAppendable->p + pAppendable->iWriting - cSource;
+}
+    
+PRIVATE const char *librock_fillTemplate(char **ppFilled, const char *pTemplate, int argc, char * const * const argv)
 { //DEBUG: reuse
     int pass; //two passes.
     struct librock_appendable aFilled;
-    memset((void *)&aFilled, '\0', sizeof(aFilled));
+    librock_appendableSet(&aFilled, 0, 0, 0);
     for (pass = 0;pass < 2;pass++) {
         /* First pass we determine necessary size */
         const char *pRead = pTemplate;
+        /* if pass==0, aFilled.p is 0, and .cb is being incremented */
         if (pass == 1) { // Second pass.
-            aFilled.cb += 2;
+            aFilled.cb += 1;
             aFilled.p = malloc(aFilled.cb);
             if (!aFilled.p) {
                 return "E-1144 malloc failed";
@@ -1936,17 +2044,80 @@ PRIVATE char *librock_fillTemplate(char **ppFilled, const char *pTemplate, int a
 
             pRead = strchr(pRead, '@');
             if (pRead) {
-                if (pass == 0) {
-                    aFilled.cb += pRead - pStart;
+                const char *pNext;
+                if (!librock_safeAppend0(&aFilled, pStart, pRead-pStart)) {
+                     return "E-2049 would overflow pre-allocated block";
+                }
+                if (pRead[1] == '/' && pRead[2] == '/') {//  '@//' is comment to end of line.
                 } else {
-                    librock_safeAppend0(&aFilled, pStart, pRead-pStart);
+                    pNext = strchr(pRead+1, '@');
+                    if (!pNext) {
+                        return("E-1153 unmatched @ in template");
+                    }
                 }
                 if (pRead[1] == '@') {
                     // double '@@' is copied as single '@'
                     pRead += 2;
-                    if (pass == 0) {
-                        aFilled.cb += 1;
+                    if (!librock_safeAppend0(&aFilled, "@", 1)) {
+                         return "E-2049 would overflow pre-allocated block";
                     }
+                } else if (pRead[1] == 'e') {// environment variable
+                    int bUriEncode = 0;
+                    char *pName = (char *)malloc(pNext-pRead+1);
+                    char *pValue = 0;
+
+                    if (!pName) {
+                        return "E-1990 malloc failed";
+                    }
+                    pRead += 2;
+                    if (*pRead == 'u') {
+                        bUriEncode = 1;
+                        pRead++;
+                    }
+                    /* Copy the name */
+                    memmove(pName, pRead, pNext-pRead);
+                    pName[pNext-pRead] = '\0';
+
+#if defined LIBROCK_WANT_GETENV_S_FOR_MSC_VER
+                    {
+                        int cNeeded = 0;
+                        if (getenv_s(&cNeeded, 0, 0, pName) != ERANGE) {
+                            freeOnce((void **) &pName);
+                            return "E-1999 environment variable not found";
+                        }
+                        pValue = malloc(cNeeded+1);
+                        if (!pValue) {
+                            freeOnce((void **) &pName);
+                            return "E-2010 malloc failed";
+                        }
+                        if (getenv_s(&cNeeded, pValue, cNeeded+1, pName)) {
+                            freeOnce((void **) &pName);
+                            freeOnce((void **) &pValue);
+                            return "E-1999 environment variable not found";
+                        }
+                    }
+                        
+#else
+                    pValue = getenv(pName);
+                    if (!pValue) {
+                        freeOnce((void **) &pName);
+                        return "E-1999 environment variable not found";
+                    }
+#endif
+                    if (bUriEncode) {
+                        if (!librock_safeAppendUriEncoded0(&aFilled, pValue, strlen(pValue))) {
+                            return "E-2049 would overflow pre-allocated block";
+                        }
+                    } else {
+                        if (!librock_safeAppendEnv0(&aFilled, pName)) {
+                            return "E-2049 would overflow pre-allocated block";
+                        }
+                    }
+                    pRead = pNext+1;
+#if defined LIBROCK_WANT_GETENV_S_FOR_MSC_VER
+                    freeOnce((void **) &pValue);
+#endif
+                    freeOnce((void **) &pName);
                 } else if (pRead[1] == '/' && pRead[2] == '/') {//  '@//' is comment to end of line.
                     if (strchr(pRead, '\n')) {
                         if (pRead == pTemplate || pRead[-1] == '\n') {
@@ -1963,31 +2134,32 @@ PRIVATE char *librock_fillTemplate(char **ppFilled, const char *pTemplate, int a
                         pRead += strlen(pRead);
                     }
                 } else { /* Replaceable parameter */
-                    int n = atoi(pRead+1);
-                    if (!strchr("0123456789",pRead[1])) {
+                    int iParameter;
+                    int bUriEncode = 0;
+                    pRead++;
+                    if (*pRead == 'u') {
+                        bUriEncode = 1;
+                        pRead++;
+                    }
+                    if (!strchr("0123456789", *pRead)) {
                         return("E-1811 non-numeric replaceable @parameter@ in template");
                     }
-                    pRead = strchr(pRead+1, '@');
-                    if (!pRead) {
-                        return("E-1153 unmatched @ in template");
-                    }
-                    if ((n < 0) || (n >= argc)) {
+                    iParameter = atoi(pRead);
+                    if ((iParameter < 0) || (iParameter >= argc)) {
                         return("E-1157 parameter index out of range\n");
                     }
-                    pRead++;
-                    if (pass == 0) {
-                        aFilled.cb += strlen(argv[n]);
+
+                    pRead = pNext + 1;
+
+                    if (bUriEncode) {
+                        librock_safeAppendUriEncoded0(&aFilled, argv[iParameter], -1);
                     } else {
-                        librock_safeAppend0(&aFilled, argv[n], -1);
+                        librock_safeAppend0(&aFilled, argv[iParameter], -1);
                     }
                 }
             } else {
                 /* rest of string from pStart */
-                if (pass == 0) {
-                    aFilled.cb += strlen(pStart);
-                } else {
-                    librock_safeAppend0(&aFilled, pStart, -1);
-                }
+                librock_safeAppend0(&aFilled, pStart, -1);
             }
         }
     }
