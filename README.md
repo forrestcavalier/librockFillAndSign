@@ -6,8 +6,9 @@ Fill a CURL config file template with AWS  signature version 4. Cross-platform C
 
  LICENSE:   MIT (Free/OpenSource)
 
- STABLITY:  UNSTABLE as of 2016-11-22
-            Check for updates at: https://github.com/forrestcavalier/awsFillAndSign
+ STABLITY:  UNSTABLE as of 2016-12-05
+            <br>Check for updates at: https://github.com/forrestcavalier/awsFillAndSign
+            <br>Travis-CI status: [![Build Status](https://travis-ci.org/forrestcavalier/awsFillAndSign.svg?branch=master)](https://travis-ci.org/forrestcavalier/awsFillAndSign)
 
  SUPPORT:   Contact the author for commercial support and consulting at
             http://www.mibsoftware.com/
@@ -25,7 +26,7 @@ Fill a CURL config file template with AWS  signature version 4. Cross-platform C
    The output is the filled template with AWS Version 4 signatures added.
 
  OPTIONS:
-  -e <service>     Use service (e.g 's3') and the environment variables
+  -e <service>     Set credentials from <service> and environment variables:
                    AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION
   -t <file-name>   Load template from file.
   -v               Verbose debugging output on stderr, including generated
@@ -33,6 +34,7 @@ Fill a CURL config file template with AWS  signature version 4. Cross-platform C
   -bs              Calculate the SHA256 body signature for the upload-file or
                    the data CURL options from the filled template.
   -b <file-name>   Calculate SHA256 body signature from file.
+  -d <name=value>  Put name=value into the environment.
   -                Marker for end of arguments. (Useful when parameters that
                    follow may start with '-'.)
 
