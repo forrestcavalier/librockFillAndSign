@@ -10,7 +10,7 @@
                 hmacsha256.c librock_sha256.c
             See details at [[Header include and compatibility]], below.
                 
- STABLITY:  UNSTABLE as of 2016-11-22
+ STABLITY:  UNSTABLE as of 2016-12-05
             Be sure to compile with -DLIBROCK_UNSTABLE.
             Check for updates at: https://github.com/forrestcavalier/awsFillAndSign
               
@@ -1510,7 +1510,7 @@ int main(int argc, char **argv)
 "\n""   The output is the filled template with AWS Version 4 signatures added."
 "\n"
 "\n"" OPTIONS:"
-"\n""  -e <service>     Use service (e.g 's3') and the environment variables"
+"\n""  -e <service>     Set credentials from <service> and environment variables:"
 "\n""                   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION"
 "\n""  -t <file-name>   Load template from file."
 "\n""  -v               Verbose debugging output on stderr, including generated"
@@ -1518,6 +1518,7 @@ int main(int argc, char **argv)
 "\n""  -bs              Calculate the SHA256 body signature for the upload-file or"
 "\n""                   the data CURL options from the filled template."
 "\n""  -b <file-name>   Calculate SHA256 body signature from file."
+"\n""  -d <name=value>  Put name=value into the environment."
 "\n""  -                Marker for end of arguments. (Useful when parameters that"
 "\n""                   follow may start with '-'.)"
 "\n"
@@ -1595,6 +1596,18 @@ int main(int argc, char **argv)
                     }
                 } else {
                     credentialsFromEnv = argv[argumentIndex]+2;
+                }
+            } else if (!strncmp(argv[argumentIndex], "-d", 2)) {
+                if (!strcmp(argv[argumentIndex], "-d")) {
+                    if (argumentIndex + 1 > argc) {
+                        argumentIndex = argc;
+                        break; //Show usage message
+                    } else {
+                        putenv(argv[argumentIndex + 1]);
+                        argumentIndex++;
+                    }
+                } else {
+                    putenv(argv[argumentIndex]+2);
                 }
             } else if (!strncmp(argv[argumentIndex], "-bs", 3)) {
                 scanSignature = 1;
