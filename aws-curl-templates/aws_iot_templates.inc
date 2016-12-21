@@ -9,7 +9,7 @@
    
  LICENSE:   MIT (Free/OpenSource)
  
- STABLITY:  UNSTABLE as of 2016-11-22
+ STABILITY: UNSTABLE as of 2016-11-22
             Be sure to compile with -DLIBROCK_UNSTABLE.
             Check for updates at: https://github.com/forrestcavalier/awsFillAndSign
               
@@ -19,4 +19,3 @@
    
  */
 //http://docs.aws.amazon.com/iot/latest/apireference/Welcome.html
-
