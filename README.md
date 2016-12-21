@@ -13,35 +13,43 @@ Fill a CURL config file template with AWS  signature version 4. Cross-platform C
             http://www.mibsoftware.com/
 
 ```
- USAGE: awsFillAndSign [-e][-v][-bs] template-name.curl [param1[ param2...]]
 
-   Without -e, credentials are taken from one line on stdin in the format of:
-      <region>/<service>,<ID>,<SECRET>
-   e.g:
-      us-east-1/s3,AXXXXXXXXXXXXXXXXXXX,7777777777777777777777777777777777777777
+ USAGE: awsFillAndSign -e <scope> <template-name.curl> [param1[ param2...]]
 
    Parameters (param1,param2,...) must already be URI-Encoded as appropriate.
 
    The output is the filled template with AWS Version 4 signatures added.
 
  OPTIONS:
-  -e <service>     Use service (e.g 's3') and the environment variables
+  -e <scope>     Set credentials from <scope> and 3 environment variables:
                    AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION
-  -t <file-name>   Load template from file.
-  -v               Verbose debugging output on stderr, including generated
+       NOTE: Without -e, credentials are taken from one line on stdin in
+       the format of:
+          <region>/<scope>,<ID>,<SECRET>
+       e.g:
+          us-east-1/s3,AXXXXXXXXXXXXXXXXXXX,7777777777777777777777777777777777777777
+
+  --from-file      Load template from file, <template-name.curl>
+       NOTE: Without --from-file, name a built-in template.  See --list.
+
+  --verbose        Verbose debugging output on stderr, including generated
                    AWS Canonical Request fields.
+
   -bs              Calculate the SHA256 body signature for the upload-file or
                    the data CURL options from the filled template.
+
   -b <file-name>   Calculate SHA256 body signature from file.
+
+  -d <name=value>  Put name=value into the environment.
+
   -                Marker for end of arguments. (Useful when parameters that
                    follow may start with '-'.)
 
  INFORMATION commands (output is not a filled and signed template:)
   --help           Show this message.
-  --list           List the standard templates.
-  --write <name>   Show the named standard template along with comments.
+  --list           List the built-in templates.
+  --list <name>    Show the named built-in template along with comments.
 ```
-
 #Understanding Templates
 Templates are small text files which mark replaceable parameters surrounded by '@'.  The purpose of awsFillAndSign is to strip comments, replace the parameters, sign the request, and write the output so that CURL can run it.
 
