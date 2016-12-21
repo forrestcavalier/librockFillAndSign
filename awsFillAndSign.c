@@ -10,7 +10,7 @@
                 hmacsha256.c librock_sha256.c
             See details at [[Header include and compatibility]], below.
                 
- STABLITY:  UNSTABLE as of 2016-12-05
+ STABILITY: UNSTABLE as of 2016-12-16
             Be sure to compile with -DLIBROCK_UNSTABLE.
             Check for updates at: https://github.com/forrestcavalier/awsFillAndSign
               
@@ -67,7 +67,7 @@ TABLE OF CONTENTS FOR THE REST OF THIS FILE
     [[Predeclarations of functions from hmacsha256.c]]
         librock_hmacSha256
 
-    [[standard templates]]
+    [[built-in templates]]
 
     [[function main()]]  #if defined(LIBROCK_AWSFILLANDSIGN_MAIN)
                
@@ -1417,9 +1417,9 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
     return 0;
 } /* librock_awsSignature_outputWithAuthorization */
 /**************************************************************/
-//[[standard templates]]
+//[[built-in templates]]
 
-const char *librock_awsStandardTemplates[] = {
+const char *librock_awsBuiltInTemplates[] = {
     "@//awsFillAndSign_write_templates_" //Placeholder
 
 #include "aws_templates.inc"
@@ -1427,16 +1427,16 @@ const char *librock_awsStandardTemplates[] = {
 ,0 // End of list
 };
 
-const char *librock_awsStandardTemplate(const char *pName)
+const char *librock_awsBuiltInTemplate(const char *pName)
 {
     int i;
     int cName;
     i = 0;
     cName = strlen(pName);
-    while(librock_awsStandardTemplates[i]) {
-        if (countToEol(librock_awsStandardTemplates[i]+3)==cName) {
-            if (!strncmp(pName,librock_awsStandardTemplates[i]+3,cName)) {
-                return librock_awsStandardTemplates[i]+3+cName+1;
+    while(librock_awsBuiltInTemplates[i]) {
+        if (countToEol(librock_awsBuiltInTemplates[i]+3)==cName) {
+            if (!strncmp(pName,librock_awsBuiltInTemplates[i]+3,cName)) {
+                return librock_awsBuiltInTemplates[i]+3+cName+1;
             }
         }
         i++;
@@ -1461,6 +1461,7 @@ int main(int argc, char **argv)
     int argumentIndex;
     int bVerbose = 0;
     int scanSignature = 0;
+    int fromFile = 0;
     const char *credentialsFromEnv = 0;
     unsigned char mdContent32[] = { /* SHA256 of empty string */
         0xe3,0xb0,0xc4,0x42,0x98,0xfc,0x1c,0x14,0x9a,0xfb,0xf4,0xc8,0x99,0x6f,0xb9,0x24,0x27,0xae,0x41,0xe4,0x64,0x9b,0x93,0x4c,0xa4,0x95,0x99,0x1b,0x78,0x52,0xb8,0x55
@@ -1481,7 +1482,7 @@ int main(int argc, char **argv)
                    template file name to start with - */
                 break;
             }
-            if (!strcmp(argv[argumentIndex], "-v")) {
+            if (!strcmp(argv[argumentIndex], "--verbose")) {
                 bVerbose = 1;
             } else if (!strcmp(argv[argumentIndex], "--help")) {    
                     fprintf(stdout, "%s",
@@ -1491,100 +1492,73 @@ int main(int argc, char **argv)
 "\n"
 "\n"" LICENSE:   MIT (Free/OpenSource)"
 "\n" 
-"\n"" STABLITY:  UNSTABLE as of 2016-11-22"
+"\n"" STABILITY: UNSTABLE as of 2016-11-22"
 "\n""            Check for updates at: https://github.com/forrestcavalier/awsFillAndSign"
 "\n"              
 "\n"" SUPPORT:   Contact the author for commercial support and consulting at"
 "\n""            http://www.mibsoftware.com/"
 "\n"
 "\n"
-"\n"" USAGE: awsFillAndSign [-e][-v][-bs] template-name.curl [param1[ param2...]]"
-"\n"
-"\n""   Without -e, credentials are taken from one line on stdin in the format of:"
-"\n""      <region>/<service>,<ID>,<SECRET>"
-"\n""   e.g:"
-"\n""      us-east-1/s3,AXXXXXXXXXXXXXXXXXXX,7777777777777777777777777777777777777777"
+"\n"" USAGE: awsFillAndSign -e <scope> <template-name.curl> [param1[ param2...]]"
 "\n"
 "\n""   Parameters (param1,param2,...) must already be URI-Encoded as appropriate."
 "\n"
 "\n""   The output is the filled template with AWS Version 4 signatures added."
 "\n"
 "\n"" OPTIONS:"
-"\n""  -e <service>     Set credentials from <service> and environment variables:"
+"\n""  -e <scope>     Set credentials from <scope> and 3 environment variables:"
 "\n""                   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION"
-"\n""  -t <file-name>   Load template from file."
-"\n""  -v               Verbose debugging output on stderr, including generated"
+"\n""       NOTE: Without -e, credentials are taken from one line on stdin in"
+"\n""       the format of:"
+"\n""          <region>/<scope>,<ID>,<SECRET>"
+"\n""       e.g:"
+"\n""          us-east-1/s3,AXXXXXXXXXXXXXXXXXXX,7777777777777777777777777777777777777777"
+"\n"
+"\n""  --from-file      Load template from file, <template-name.curl>"
+"\n""       NOTE: Without --from-file, name a built-in template.  See --list."
+"\n"
+"\n""  --verbose        Verbose debugging output on stderr, including generated"
 "\n""                   AWS Canonical Request fields."
+"\n"
 "\n""  -bs              Calculate the SHA256 body signature for the upload-file or"
 "\n""                   the data CURL options from the filled template."
+"\n"
 "\n""  -b <file-name>   Calculate SHA256 body signature from file."
+"\n"
 "\n""  -d <name=value>  Put name=value into the environment."
+"\n"
 "\n""  -                Marker for end of arguments. (Useful when parameters that"
 "\n""                   follow may start with '-'.)"
 "\n"
 "\n"" INFORMATION commands (output is not a filled and signed template:)"
 "\n""  --help           Show this message."
-"\n""  --list           List the standard templates."
-"\n""  --write <name>   Show the named standard template along with comments."
+"\n""  --list           List the built-in templates."
+"\n""  --list <name>    Show the named built-in template along with comments."
 );
 
                 return 0;
             } else if (!strcmp(argv[argumentIndex], "--list")) {    
                 int i;
                 i = 1;
-
-                while(librock_awsStandardTemplates[i]) {
-                    fprintf(stdout, "%.*s\n", countToEol(librock_awsStandardTemplates[i]+3), librock_awsStandardTemplates[i]+3);
-                    i++;
-                }
-                return 0;
-            } else if (!strcmp(argv[argumentIndex], "--write")) {
-                /* write unfilled template */
-               
-                if (argumentIndex >= argc) {
-                    fprintf(stderr, "Usage: awsFillAndSign [-v][-b fileBodyToSign] -t template.txt param1 param2 param3\nTry --help.");
-                    return -1;
-                }
-                pRequestTemplate = (char *) librock_awsStandardTemplate(argv[argumentIndex+1]);
-                if (!pRequestTemplate) {
-                    fprintf(stderr, "I-1515 no standard template '%s'\n", argv[argumentIndex+1]);
-                    return 9;
-                }
-                fprintf(stdout, "@//%s\n", argv[argumentIndex+1]);
-                fprintf(stdout, "%s\n", pRequestTemplate);
-                return 0;
-                
-            } else if (!strncmp(argv[argumentIndex], "-t", 2)) {
-                /* Load template from file */
-                char *pWrite = 0;
-                
-                if (argumentIndex >= argc) {
-                    fprintf(stderr, "Usage: awsFillAndSign [-v][-b fileBodyToSign] -t template.txt param1 param2 param3\nTry --help.");
-                    return -1;
-                }
-                
-                if (!strcmp(argv[argumentIndex], "-t")) {
-                    pWrite = (char *) librock_fileGetContents(argv[argumentIndex+1]);
-                    argumentIndex++;
-                } else {
-                    pWrite = (char *) librock_fileGetContents(argv[argumentIndex]+2);
-                }
-                if (!pWrite) {
-                    perror("E-1096 load template");
-                    return 1;
-                }
-                
-                /* Strip \r in place */
-                char *pRead = pWrite;
-                pRequestTemplate = pWrite;
-                while (*pRead) {
-                    while (*pRead == '\r') {
-                        pRead++;
+                if (argumentIndex == argc-1) {
+                    while(librock_awsBuiltInTemplates[i]) {
+                        fprintf(stdout, "%.*s\n", countToEol(librock_awsBuiltInTemplates[i]+3), librock_awsBuiltInTemplates[i]+3);
+                        i++;
                     }
-                    *pWrite++ = *pRead++;
+                } else {
+                    pRequestTemplate = (char *) librock_awsBuiltInTemplate(argv[argumentIndex+1]);
+                    if (!pRequestTemplate) {
+                        fprintf(stderr, "I-1515 no built-in template '%s'\n", argv[argumentIndex+1]);
+                        return 9;
+                    }
+                    fprintf(stdout, "@//%s\n", argv[argumentIndex+1]);
+                    fprintf(stdout, "%s\n", pRequestTemplate);
+                    return 0;
                 }
-                *pWrite = '\0';
-                
+                return 0;
+            } else if (!strcmp(argv[argumentIndex], "--from-file")) {
+                /* Load template from file */
+                fromFile = 1;
             } else if (!strncmp(argv[argumentIndex], "-e", 2)) {
                 if (!strcmp(argv[argumentIndex], "-e")) {
                     if (argumentIndex + 1 > argc) {
@@ -1598,17 +1572,24 @@ int main(int argc, char **argv)
                     credentialsFromEnv = argv[argumentIndex]+2;
                 }
             } else if (!strncmp(argv[argumentIndex], "-d", 2)) {
+                const char *pVariable;
                 if (!strcmp(argv[argumentIndex], "-d")) {
                     if (argumentIndex + 1 > argc) {
                         argumentIndex = argc;
                         break; //Show usage message
                     } else {
-                        putenv(argv[argumentIndex + 1]);
+                        pVariable = argv[argumentIndex + 1];
                         argumentIndex++;
                     }
                 } else {
-                    putenv(argv[argumentIndex]+2);
+                    pVariable = argv[argumentIndex]+2;
                 }
+                if (strstr(pVariable, "AWS_SECRET_ACCESS_KEY")!=0) {
+                    /* Prohibit operation with potential secret disclosure */
+                    fprintf(stderr, "-d must not set AWS_SECRET_ACCESS_KEY on command line\n");
+                    return 15;
+                }
+                putenv(pVariable);
             } else if (!strncmp(argv[argumentIndex], "-bs", 3)) {
                 scanSignature = 1;
             } else if (!strncmp(argv[argumentIndex], "-b", 2)) {
@@ -1638,7 +1619,7 @@ int main(int argc, char **argv)
     }
 
     if (argumentIndex > argc) {
-        fprintf(stderr, "Usage: awsFillAndSign [-v][-b fileBodyToSign] -t template.txt param1 param2 param3\nTry --help.");
+        fprintf(stderr, "Usage: awsFillAndSign -e <scope> <template-name.curl> [param1[ param2...]]\nTry --help.");
         return -1;
     }
     if (credentialsFromEnv) {
@@ -1656,7 +1637,7 @@ int main(int argc, char **argv)
             return 14;
         }
 
-        /* service */
+        /* service scope */
         if (!librock_safeAppend0(&aCredentials, credentialsFromEnv, -1)) {
             fprintf(stderr, "%s\n", "I-1649 credentials would overflow fixed buffer");
             return 14;
@@ -1699,14 +1680,41 @@ int main(int argc, char **argv)
     }
     //Output nothing on error. Don't want to send a request that will be rejected.
 
-    if (!pRequestTemplate) {   /* Use built-in template */
-        pRequestTemplate = (char *) librock_awsStandardTemplate(argv[argumentIndex]);
+    /* Get template */
+    if (fromFile) {
+        char *pWrite = 0;
+        if (bVerbose) {
+        }
+        pWrite = (char *) librock_fileGetContents(argv[argumentIndex]);
+        if (!pWrite) {
+            perror("E-1096 load template");
+            fprintf(stderr, "I-1701 loading template file '%s'\n", argv[argumentIndex]);
+            return 1;
+        }
+        
+        /* Strip \r in place */
+        char *pRead = pWrite;
+        pRequestTemplate = pWrite;
+        while (*pRead) {
+            while (*pRead == '\r') {
+                pRead++;
+            }
+            *pWrite++ = *pRead++;
+        }
+        *pWrite = '\0';
+        fprintf(stderr, "I-1703 loaded template file '%s'\n", argv[argumentIndex]);
+    } else {   /* Use built-in template */
+        pRequestTemplate = (char *) librock_awsBuiltInTemplate(argv[argumentIndex]);
         if (!pRequestTemplate) {
-            fprintf(stderr, "I-1515 no standard template '%s'\n", argv[argumentIndex]);
+            fprintf(stderr, "I-1515 no built-in template '%s'\n", argv[argumentIndex]);
             return 9;
         }
-        argumentIndex++; /* Advance to template parameters */
+        if (bVerbose) {
+            fprintf(stderr, "I-1710 loaded built-in template '%s'\n", argv[argumentIndex]);
+        }
     }
+    argumentIndex++; /* Advance to template parameters */
+
     {
         char *pFilledRequest = 0;
         const char *pErrorMessage = 0;
