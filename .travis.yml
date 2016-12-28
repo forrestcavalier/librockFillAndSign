@@ -1,9 +1,7 @@
 language: C
 
-
-
 script:
- - make
+ - make coverage
  - sh tests/testCoverage.sh
 
 after_success:

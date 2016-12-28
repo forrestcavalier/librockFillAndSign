@@ -1,5 +1,8 @@
 awsFillAndSign: awsFillAndSign.o hmacsha256.o librock_sha256.o
 
+coverage:
+	${CC} -o awsFillAndSign -Dlibrock_WANT_ALTERNATE_BRANCHING -fprofile-arcs -ftest-coverage -DLIBROCK_UNSTABLE -DLIBROCK_AWSFILLANDSIGN_MAIN awsFillAndSign.c
+
 INCLUDES = librock_fdio.h \
 	librock_postinclude.h \
 	librock_preinclude.h \
