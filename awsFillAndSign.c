@@ -2300,7 +2300,7 @@ PRIVATE const char *librock_fillTemplate(char **ppFilled, const char *pTemplate,
     } /* fileSha256Contents */
 #endif
     
-//C:\montana_m\corp\process\restoretargpg>gcc -o awsFillAndSign -Dlibrock_WANT_ALTERNATE_BRANCHING -fprofile-arcs -ftest-coverage -DLIBROCK_UNSTABLE -DLIBROCK_AWSFILLANDSIGN_MAIN -Werror -Wall awsFillAndSign.c hmacsha256.c librock_sha256.c
+//gcc -o awsFillAndSign -Dlibrock_WANT_ALTERNATE_BRANCHING -fprofile-arcs -ftest-coverage -DLIBROCK_UNSTABLE -DLIBROCK_AWSFILLANDSIGN_MAIN -Werror -Wall awsFillAndSign.c hmacsha256.c librock_sha256.c
 int librock_triggerAlternateBranch(const char *name, long *pLong)
 {
     /* Cases:
@@ -2311,7 +2311,7 @@ int librock_triggerAlternateBranch(const char *name, long *pLong)
            Reached and need to repeat
      */
     if (!name) { /* Call once this way, for the whole application */
-        unlink("librock_armAlternateBranch_next.txt");
+        remove("librock_armAlternateBranch_next.txt");
         rename("librock_armAlternateBranch.txt", "librock_armAlternateBranch_next.txt");
         return 0;
     }
@@ -2338,12 +2338,12 @@ int librock_triggerAlternateBranch(const char *name, long *pLong)
         if (!strncmp(buf, name, length) && buf[length] == ' ') {
             /* Matched */
             *pLong = atol(buf + length+1);
-            _unlink("librock_armAlternateBranch.txt");
+            remove("librock_armAlternateBranch.txt");
             f = fopen("librock_armAlternateBranch_next.txt","wb");
             if (!f) {perror("I-2316 librock_armAlternateBranch_next.txt");exit(-1);} //One line, to keep gcov counts accurate
             fputs(name, f);
             fputs(" ", f);
-            _ltoa(*pLong+1, buf, 10);
+            snprintf(buf,sizeof(buf),"%ld",*pLong+1);
             fputs(buf, f);
             fclose(f);
         } else {
