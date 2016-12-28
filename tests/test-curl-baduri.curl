@@ -1,0 +1,16 @@
+@//aws-ec2-describe-instances.curl
+@// TEMPLATE FOR:  AWS EC2 DescribeInstances
+@// REST API DOCS: http://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeInstances.html
+@//
+@// TEMPLATE REVISION:    2016-11-26 by MIB SOFTWARE, INC.
+@// TEMPLATE LICENSE:     MIT (Free/Open Source)
+@// TEMPLATE PARAMETERS:  None
+@//
+@// (Use awsFillAndSign by MIB SOFTWARE to fill the template, strip comments,
+@// and add AWS Signatures before using CURL. IMPORTANT: use the -bs command
+@// line flag to compute the SHA256 signature of the POST data.)
+request = "POST"
+url="https://ec2.amazonaws.com"
+data="Action=DescribeInstances&Version=2016-09-15\"\r\n\t\v\\"
+header = "host:ec2.amazonaws.com"
+header = "Authorization: AWS4-HMAC-SHA256 Credential=...,SignedHeaders=...,Signature=... (all will be replaced)"
