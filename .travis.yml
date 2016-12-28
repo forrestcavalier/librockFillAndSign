@@ -4,7 +4,7 @@ language: C
 
 script:
  - make
- - tests/testCoverage.sh
+ - sh tests/testCoverage.sh
 
 after_success:
   - bash <(curl -s https://codecov.io/bash) || echo "Codecov did not collect coverage reports"
