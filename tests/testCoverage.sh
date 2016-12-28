@@ -141,3 +141,4 @@ while [ -f librock_armAlternateBranch.txt ]
 gcov awsFillAndSign.c
 gcov hmacsha256.c
 gcov librock_sha256.c
+exit 0
