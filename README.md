@@ -9,6 +9,7 @@ Fill a CURL config file template with AWS  signature version 4. Cross-platform C
  STABLITY:  UNSTABLE as of 2016-12-05
             <br>Check for updates at: https://github.com/forrestcavalier/awsFillAndSign
             <br>Travis-CI status: [![Build Status](https://travis-ci.org/forrestcavalier/awsFillAndSign.svg?branch=master)](https://travis-ci.org/forrestcavalier/awsFillAndSign)
+            <br>CodeCov status: [![codecov](https://codecov.io/gh/forrestcavalier/awsFillAndSign/branch/master/graph/badge.svg)](https://codecov.io/gh/forrestcavalier/awsFillAndSign)
 
  SUPPORT:   Contact the author for commercial support and consulting at
             http://www.mibsoftware.com/
