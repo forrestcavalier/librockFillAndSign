@@ -12,7 +12,8 @@
 request = "POST"
 url="https://ec2.amazonaws.com/"
 data="Action=DescribeInstances&Version=2016-09-15\"\r\n\t\v\\"
-header = "host:ec2.amazonaws.com"
+header= "host:ec2.amazonaws.com"
 header = "x-amz-date: 20161223T165746Z"
 header = "x-no-end-quote: test
 header = "Authorization: AWS4-HMAC-SHA256 Credential=...,SignedHeaders=...,Signature=... (all will be replaced)"
+other=

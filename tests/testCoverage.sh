@@ -33,13 +33,24 @@ echo x,y,z | ./awsFillAndSign -DCLParam=%%test --from-file tests/test-raw.txt pa
 echo x,y,zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz | ./awsFillAndSign -DCLParam=%%test --from-file tests/test-raw.txt param1 2>>tests/$FIFILE
 
 # escapes and parameter testing.
+echo /x/y,y,z | ./awsFillAndSign 2>>tests/$FIFILE
+echo /x/y,y,z | ./awsFillAndSign --verbose 2>>tests/$FIFILE
 echo /x/y,y,z | ./awsFillAndSign --verbose -DCLParam=%%test --from-file tests/test-raw.txt param1@ 2>>tests/$FIFILE
 echo /x/y,y,z | ./awsFillAndSign -bs --verbose -D CLParam=%%test --from-file tests/test-curl-escapes.curl 2>>tests/$FIFILE
 echo /x/y,y,z | ./awsFillAndSign --verbose -DCLParam=%%test --from-file tests/test-raw2.txt param1@ 2>>tests/$FIFILE
 echo /x/y,y,z | ./awsFillAndSign -b tests/test-raw2.txt --verbose -DCLParam=%%test --from-file tests/test-raw2.txt param1@ 2>>tests/$FIFILE
 echo /x/y,y,z | ./awsFillAndSign -bs --verbose -D CLParam=%%test --from-file tests/test-curl-baduri.curl 2>>tests/$FIFILE
+echo /x/y,y,z | ./awsFillAndSign -bs --verbose -D CLParam=%%test --from-file tests/test-missing-request.curl 2>>tests/$FIFILE
 echo /x/y,y,z | ./awsFillAndSign -bs --verbose -D missingCLParam=%%test --from-file tests/test-raw.txt param1@ 2>>tests/$FIFILE
+# bad header
+echo /x/y,y,z | ./awsFillAndSign -bs --verbose -D CLParam=%%test --from-file tests/test-curl-bad-header.curl 2>>tests/$FIFILE
+# unmatched @
 echo /x/y,y,z | ./awsFillAndSign --verbose -DCLParam=%%test --from-file tests/test-raw4.txt param1@ 2>>tests/$FIFILE
+# negative
+echo /x/y,y,z | ./awsFillAndSign --verbose -DCLParam=%%test --from-file tests/test-raw6.txt param1@ 2>>tests/$FIFILE
+echo /x/y,y,z | ./awsFillAndSign --verbose -DCLParam=%%test --from-file tests/test-raw7.txt param1@ 2>>tests/$FIFILE
+echo /x/y,y,z | ./awsFillAndSign -bs --verbose -D CLParam=%%test --from-file tests/test-truncated-data1.curl 2>>tests/$FIFILE
+echo /x/y,y,z | ./awsFillAndSign -bs --verbose -D CLParam=%%test --from-file tests/test-truncated-data2.curl 2>>tests/$FIFILE
 
 # invalid command line parameters
 echo /x/y,y,z | ./awsFillAndSign -bs --verbose -D 2>>tests/$FIFILE
@@ -141,4 +152,3 @@ while [ -f librock_armAlternateBranch.txt ]
 gcov awsFillAndSign.c
 gcov hmacsha256.c
 gcov librock_sha256.c
-exit 0
