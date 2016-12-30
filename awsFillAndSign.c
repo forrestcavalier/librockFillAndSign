@@ -2301,7 +2301,7 @@ PRIVATE const char *librock_fillTemplate(char **ppFilled, const char *pTemplate,
     
 //gcc -o awsFillAndSign -Dlibrock_WANT_ALTERNATE_BRANCHING -fprofile-arcs -ftest-coverage -DLIBROCK_UNSTABLE -DLIBROCK_AWSFILLANDSIGN_MAIN -Werror -Wall awsFillAndSign.c hmacsha256.c librock_sha256.c
 #if defined librock_WANT_ALTERNATE_BRANCHING
-#include "awsFillAndSignCoverage.c"
+#include "tests/awsFillAndSignCoverage.c"
 #else
 int librock_triggerAlternateBranch(const char *name, long *pLong)
 {
