@@ -1495,13 +1495,15 @@ while((pRead = strstr(pRead,"@//"))) {
         if (!pValue2) {
             /* Not in the environment, so define it now */
             pValue[cName] = '=';
-            iError = putenv(pValue);
+            iError = putenv((char *) pValue);
             if (GLOBAL_ALTERNATE_BRANCH) {
                 iError = -1;
             }
             if (iError) {
                 freeOnce((void **) &pValue);
                 return "E-1479 putenv failed";
+            } else {
+                pValue = 0; /* Make permanent */
             }
         } else {
             freeOnce((void **) &pValue2);
@@ -1656,7 +1658,7 @@ int main(int argc, char **argv)
                     fprintf(stderr, "-D must not set AWS_SECRET_ACCESS_KEY on command line\n");
                     return 15;
                 }
-                putenv(pVariable);
+                putenv((char *) pVariable);
             } else if (!strncmp(argv[argumentIndex], "--have-sha256", 3)) {
                 scanSignature = 0;
             } else if (!strncmp(argv[argumentIndex], "-b", 2)) {
