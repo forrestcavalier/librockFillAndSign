@@ -1,0 +1,5 @@
+url="http://montana:3080/mibsoftware-back2012/"
+header = "Host: montana"
+header = "Authorization: AWS AKIAIEMTQHXWB2TIT35Q:asdfadf"
+cacert = \jumpstart\cacert.pem
+verbose
