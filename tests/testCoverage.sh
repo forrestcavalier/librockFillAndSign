@@ -80,6 +80,8 @@ echo y,z | ./awsFillAndSign -Dtest=76 --read-key --verbose -DCLParam=%%test --fr
 # No headers
 echo y,z | ./awsFillAndSign -Dtest=78 --read-key --verbose -DCLParam=%%test --from-file tests/test-raw5.txt 2>>tests/$FIFILE
 
+cat tests/$FIFILE
+
 echo "librock_safeAppend0 1" >librock_armAlternateBranch.txt
 export FIFILE=coverageSA0.err
 rm tests/$FIFILE
@@ -164,6 +166,6 @@ while [ -f librock_armAlternateBranch.txt ]
     echo y,z | ./awsFillAndSign --read-key --verbose -DCLParam=%%test --from-file tests/test-raw2.txt param1@ 2>>tests/$FIFILE
   done
 
-gcov awsFillAndSign.c
-gcov hmacsha256.c
-gcov librock_sha256.c
+gcov -b awsFillAndSign.c
+gcov -b hmacsha256.c
+gcov -b librock_sha256.c
