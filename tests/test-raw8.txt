@@ -1,0 +1,6 @@
+@//test-raw8.txt Test of defaults
+@//.default.AWS_SERVICE_NAME=value
+@//.default.AWS_ACCESS_KEY_ID=not here
+GET /@eAWS_SERVICE_NAME@.txt
+x-fromenv:@eAWS_ACCESS_KEY_ID@
+x-amz-content-sha256: b

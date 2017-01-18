@@ -1,0 +1,2 @@
+@//test-raw9.txt Test of incorrectly formatted defaults
+@//.default.AWS_SERVICE_NAME no equals value

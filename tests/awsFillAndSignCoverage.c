@@ -136,20 +136,34 @@ int librock_coverage_main()
         );
     fprintf(stderr,"I-2402 %s\n", pString ? pString : "");
     fprintf(stderr,"I-2404 %d\n", countToValue("Up to newline\n"));
+
+    pString = librock_awsFillAndSign(
+        "request"
+        ,0/*scan signature */
+        ,"no comma credentials"
+        ,0 ,0
+        ,0 ,0
+        );
+
     if (1) {
         struct librock_appendable aBuffer;
         char credentials[200];
         const char *pRead;
+
+        librock_appendableSet(&aBuffer, 0, 0, 0);
+
+        putenv("awsFILLFAULT=this is a test");
+//out20170117        librock_safeAppendEnv0(&aBuffer,"awsFILLFAULT"); /* Calculate size only */
+
         librock_appendableSet(&aBuffer, credentials, sizeof(credentials), 0);
 
         librock_safeAppend0(&aBuffer,0,-1); //-1 length
-        librock_safeAppendEnv0(&aBuffer,"  "); //environment variable not found
+//out20170117        librock_safeAppendEnv0(&aBuffer,"  "); //environment variable not found
         aBuffer.iWriting = -1; // Set invalid position
         librock_safeAppend0(&aBuffer,"",1);
 
         aBuffer.iWriting = aBuffer.cb-2; // Set position near end
-        putenv("awsFILLFAULT=this is a test");
-        librock_safeAppendEnv0(&aBuffer,"awsFILLFAULT");
+//out20170117        librock_safeAppendEnv0(&aBuffer,"awsFILLFAULT");
 
         aBuffer.iWriting = 0;
         pRead = "%44";
