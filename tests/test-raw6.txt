@@ -1,6 +1,6 @@
 @//test-raw6.txt
 @//.default.AWS_SERVICE_NAME=ec2
-POST https://ec2.us-east-1.amazonaws.com/?test=%AA%20%41@@&test2=@-1_encoded@&clparam=@euCLParam@ @eCLParam@ HTTP/1.0
+POST https://ec2.us-east-1.amazonaws.com/?test=%AA%20%41@@&test2=@-1_encoded@&clparam=@eCLParam@ @eCLParam@ HTTP/1.0
 Content-Type: application/json
 Host: ec2.us-east-1.amazonaws.com
 x-amz-content-sha256: bbb0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 @// no terminating

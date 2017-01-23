@@ -115,36 +115,95 @@ int librock_coverage_main()
 
         free(pHashInfo);
     }
-    pString = librock_awsFillAndSign(
-        0
-        ,0
-        ,0
-        ,0
-        ,0
-        ,0
-        ,0
-        );
-    fprintf(stderr,"I-2393 %s\n", pString ? pString : "");
-    pString = librock_awsFillAndSign(
-        "request"
-        ,0
-        ,0
-        ,0
-        ,0
-        ,0
-        ,0
-        );
-    fprintf(stderr,"I-2402 %s\n", pString ? pString : "");
+    {
+        const char *pSigningParameters[6];
+        pSigningParameters[0] = 0;
+        pSigningParameters[1] = 0;
+        pSigningParameters[2] = 0;
+        pSigningParameters[3] = 0;
+        pSigningParameters[4] = 0;
+        pSigningParameters[5] = 0;
+        pString = librock_awsFillAndSign(
+            0
+            ,0
+            ,0
+            ,0
+            ,0
+            ,0
+            );
+        fprintf(stderr,"I-2393 %s\n", pString ? pString : "");
+
+        pString = librock_awsFillAndSign(
+            "request"
+            ,0
+            ,0
+            ,0
+            ,0
+            ,0
+            );
+        fprintf(stderr,"I-2402 %s\n", pString ? pString : "");
+
+        pString = librock_awsFillAndSign(
+            "request"
+            ,pSigningParameters
+            ,0
+            ,0
+            ,0
+            ,0
+            );
+        fprintf(stderr,"I-2402 %s\n", pString ? pString : "");
+
+        pSigningParameters[1] = "test";
+        pString = librock_awsFillAndSign(
+            "request"
+            ,pSigningParameters
+            ,0
+            ,0
+            ,0
+            ,0
+            );
+        fprintf(stderr,"I-2402 %s\n", pString ? pString : "");
+        pSigningParameters[2] = "test";
+        pString = librock_awsFillAndSign(
+            "request"
+            ,pSigningParameters
+            ,0
+            ,0
+            ,0
+            ,0
+            );
+        fprintf(stderr,"I-2402 %s\n", pString ? pString : "");
+        pSigningParameters[4] = "test";
+        pString = librock_awsFillAndSign(
+            "request"
+            ,pSigningParameters
+            ,0
+            ,0
+            ,0
+            ,0
+            );
+        fprintf(stderr,"I-185 %s\n", pString ? pString : "");
+        pSigningParameters[5] = "test";
+        pString = librock_awsFillAndSign(
+            "request"
+            ,pSigningParameters
+            , write_to_FILE, stdout
+            ,0
+            ,0
+            );
+        fprintf(stderr,"I-195 %s\n", pString ? pString : "");
+
+    }
     fprintf(stderr,"I-2404 %d\n", countToValue("Up to newline\n"));
-
-    pString = librock_awsFillAndSign(
-        "request"
-        ,0/*scan signature */
-        ,"no comma credentials"
-        ,0 ,0
-        ,0 ,0
-        );
-
+    {
+        int iString;
+        char **ppStringList = 0;
+        for(iString = 0;iString < 33;iString++) {
+            iString = librock_stringListGetIndex(&ppStringList, 1, "test", 4);
+            ppStringList[iString] = "test2";
+        }
+        iString = librock_stringListGetIndex(&ppStringList, 1, "test2", 4);
+    }
     if (1) {
         struct librock_appendable aBuffer;
         char credentials[200];
@@ -163,9 +222,20 @@ int librock_coverage_main()
         librock_safeAppend0(&aBuffer,"",1);
 
         aBuffer.iWriting = aBuffer.cb-2; // Set position near end
+        librock_safeAppend0(&aBuffer,"FILL",4);
+        librock_safeAppend0(&aBuffer,"FILL",4);
+        aBuffer.iWriting = aBuffer.cb-2; // Set position near end
+        librock_safeAppend0(&aBuffer,0,4);
+        librock_safeAppend0(&aBuffer,0,4);
+
+        aBuffer.iWriting = aBuffer.cb-2; // Set position near end
 //out20170117        librock_safeAppendEnv0(&aBuffer,"awsFILLFAULT");
 
         aBuffer.iWriting = 0;
+        librock_safeAppendUrlEncoded0(&aBuffer,"%",-1); //-1 length
+        needEncoding("%");
+        needEncoding("%0");
+        needEncoding("%00");
         pRead = "%44";
         librock_awsSignature_canonicalQueryString_(&aBuffer, &pRead, 0);
         pRead = "%AA";
@@ -187,12 +257,20 @@ int librock_coverage_main()
     return 0;
 } /* librock_coverage_main */
 #undef malloc
+#undef realloc
+long librock_iFaultInjection_malloc;
 void *librock_FaultInjection_malloc(size_t size)
 {
-        static long iFaultInjection;
-        if (librock_triggerAlternateBranch("malloc", &iFaultInjection)) {
+        if (librock_triggerAlternateBranch("malloc", &librock_iFaultInjection_malloc)) {
             return 0;
         }
         return malloc(size);
+}
+void *librock_FaultInjection_realloc(void *p, size_t size)
+{
+        if (librock_triggerAlternateBranch("malloc", &librock_iFaultInjection_malloc)) {
+            return 0;
+        }
+        return realloc(p, size);
 }
 #endif

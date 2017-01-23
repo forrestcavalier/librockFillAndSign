@@ -168,7 +168,9 @@ long librock_global_iAlternateBranch = 0;
 #define GLOBAL_ALTERNATE_BRANCH librock_triggerAlternateBranch("global", &librock_global_iAlternateBranch)
 
 void *librock_FaultInjection_malloc(size_t);
+void *librock_FaultInjection_realloc(void *p, size_t);
 #define malloc librock_FaultInjection_malloc
+#define realloc librock_FaultInjection_realloc
 #else
 #define GLOBAL_ALTERNATE_BRANCH 0
 #endif
@@ -205,12 +207,10 @@ void *librock_FaultInjection_malloc(size_t);
     /* Declare the workhorse function, which is public.  */
     const char *librock_awsFillAndSign( //Compute an AWS Version 4 signature
         const char *pRequestString //CURL one option per line, or HTTP headers one per line.
-        ,const unsigned char *pMdContent32 /*32 bytes: the SHA 256 of the body, or NULL if
-                                            the request has an upload-file */
-        ,const char *pAwsCredentialsString //Account ID, secret key
+        ,char const * *ppSigningParameters
         ,int (*fnOutput)(void *outputId, const char *pSource, int count) //called to write output
         ,void *outputId
-        ,int (*fnDebugOutput)(void *outputId, const char *pSource, int count) //called to write output
+        ,int (*fnDebugOutput)(void *debugOutputId, const char *pSource, int count) //called to write output
         ,void *debugOutputId
         );
     
@@ -226,10 +226,7 @@ void *librock_FaultInjection_malloc(size_t);
     PRIVATE void librock_awsRequest_start_(
                         struct librock_awsRequest_s *pRequest,
                         const char *pRequestWithoutBody,
-                        unsigned const char *pMdContent32,
-                        const char *pAwsCredentialsCsv);
-    PRIVATE const char *librock_awsSignature_findCredentials_(
-                        struct librock_awsRequest_s *pRequest);
+                        const char **ppSigningParameters);
     PRIVATE const char *librock_awsSignature_parseRequest_(
                         struct librock_awsRequest_s *pRequest);
     PRIVATE const char *librock_awsSignature_getStringToSign_(
@@ -241,9 +238,16 @@ void *librock_FaultInjection_malloc(size_t);
      
     /* Utility functions in this module */
     PRIVATE char *mallocNamedValue(const char *pName);
+    PRIVATE const char *librock_fillTemplateTokenize(
+                        const char *pTemplate,
+                        int iOffset,
+                        int *pCount
+                        );
     PRIVATE const char *librock_fillTemplate(
                         char **ppFilled,
                         const char *pTemplate,
+                        int iEncodeParameters,
+                        char ** namedArguments,
                         int argc,
                         char * const * const argv,
                         int *pErrorIndex);
@@ -276,7 +280,7 @@ void *librock_FaultInjection_malloc(size_t);
                         struct librock_appendable *pAppendable,
                         const char *pName);
 #endif
-    PRIVATE char *librock_safeAppendUriEncoded0(
+    PRIVATE char *librock_safeAppendUrlEncoded0(
                         struct librock_appendable *pAppendable,
                         const char *pSource,
                         int cSource);
@@ -310,28 +314,19 @@ void *librock_FaultInjection_malloc(size_t);
 //struct for the parsed request Callers should NOT use because it is subject to change.
  struct librock_awsRequest_s {
     const char *pRequest;
-    const char *pAwsCredentialsCsv;
+    const char **ppSigningParameters;
     const char *pURI;
-    const char *pContentSha256; /* Or leave =0 */
-    const char *pContentType;
-    const char *pCredentialScopeWithoutDate;
     const char *pCanonicalQuery;
     char *pSignedHeaders;
     const char *pXAmzDate;
-    const char *pXAmzSecurityToken;
     char const * *pListOfHeaders;
     char amzDate[100];
-    const char *pAuthorization;
     int bFormatCURL;
-    const char *pAccessKeyId;
-    const char *pKey;
-    int cKey;
     const char *pVerb;
     int cHeaders;
-    unsigned char mdContent32[32];
     int (*fnOutput)(void *outputId, const char *pSource, int count); //called to write output
     void *outputId;
-    int (*fnDebugOutput)(void *outputId, const char *pSource, int count); //called to write output
+    int (*fnDebugOutput)(void *debugOutputId, const char *pSource, int count); //called to write output
     void *debugOutputId;
 };
 
@@ -341,27 +336,44 @@ void *librock_FaultInjection_malloc(size_t);
 /* The main workhorse function. Call this one */
 const char *librock_awsFillAndSign(
         const char *pRequestWithoutBody //CURL one option per line, or HTTP headers one per line.
-        ,const unsigned char *pMdContent32 /*32 bytes: the SHA 256 of the body, or NULL */
-        ,const char *pAwsCredentials //CSV, no spaces or quotes: CredentialScopeWithoutDate,AccountID,secret key
+        ,char const * *ppSigningParameters
         ,int (*fnOutput)(void *fnOutputId, const char *pSource, int count) //called to write output
         ,void *outputId
-        ,int (*fnDebugOutput)(void *fnOutputId, const char *pSource, int count) //called to write output
+        ,int (*fnDebugOutput)(void *fnDebugOutputId, const char *pSource, int count) //called to write output
         ,void *debugOutputId
         )
 {
     struct librock_awsRequest_s awsRequest;
     const char *pErrorMessage = 0;
     char *pToSign = 0;
+#define iSHA256 0
+#define iSERVICE_REGION 1
+#define iSERVICE_NAME 2
+#define iSECURITY_TOKEN 3
+#define iACCESS_KEY_ID 4
+#define iSECRET_ACCESS_KEY 5
 
     if (!pRequestWithoutBody) {
         return("E-309 need request");
     }
-    if (!pAwsCredentials) {
-        return("E-316 need credentials in AWS IAM format");
+    if (!ppSigningParameters) {
+        return("E-316 need signingParameters.");
     }
-    
+    if (!ppSigningParameters[iSERVICE_REGION]) { 
+        return("E-316 need complete signingParameters. Missing Service Region.");
+    }
+    if (!ppSigningParameters[iSERVICE_NAME]) {
+        return("E-316 need complete signingParameters. Missing Service Name.");
+    }
+    if (!ppSigningParameters[iACCESS_KEY_ID]) { 
+        return("E-316 need complete signingParameters. Missing Access Key Id.");
+    }
+    if (!ppSigningParameters[iSECRET_ACCESS_KEY]) {
+        return("E-316 need complete signingParameters. Missing Access Key.");
+    }
+        
     /* Initialize the structure */
-    librock_awsRequest_start_(&awsRequest, pRequestWithoutBody, pMdContent32, pAwsCredentials);
+    librock_awsRequest_start_(&awsRequest, pRequestWithoutBody, ppSigningParameters);
 
     awsRequest.pListOfHeaders = 0;
     
@@ -374,10 +386,6 @@ const char *librock_awsFillAndSign(
 
     /* Parse the request */
     pErrorMessage = librock_awsSignature_parseRequest_(&awsRequest);
-    if (!pErrorMessage) {
-        /* Parse the credentials */
-        pErrorMessage = librock_awsSignature_findCredentials_(&awsRequest);
-    }
     if (!pErrorMessage) {
         /* Build the string to sign, per the AWS specification */
         pErrorMessage = librock_awsSignature_getStringToSign_(&awsRequest, &pToSign);
@@ -402,69 +410,26 @@ const char *librock_awsFillAndSign(
 PRIVATE void librock_awsRequest_start_(
     struct librock_awsRequest_s *pRequest,
     const char *pRequestWithoutBody,
-    const unsigned char *pMdContent32,
-    const char *pAwsCredentialsCsv)
+    const char **ppSigningParameters)
 { //Callers should use librock_awsSignatureVersion4(), not this.
     pRequest->pURI = 0;
-    pRequest->pContentSha256 = 0;
-    pRequest->pContentType = 0;
     pRequest->pXAmzDate = 0;
-    pRequest->pXAmzSecurityToken = 0;
-    pRequest->pAuthorization = 0;
     pRequest->bFormatCURL = 0;
     pRequest->pVerb = 0;
     pRequest->cHeaders = 0;
     pRequest->pRequest = pRequestWithoutBody;
-    pRequest->pAwsCredentialsCsv = pAwsCredentialsCsv;
-    pRequest->pCredentialScopeWithoutDate = 0;
     pRequest->pCanonicalQuery = 0;
     pRequest->pSignedHeaders = 0;
-    pRequest->pAccessKeyId = 0;
-    { /* prep the amzDate, in case we need it */
+    pRequest->ppSigningParameters = ppSigningParameters;
+    { /* prep the amzDate, in case it is not already in the request */
         time_t now;
         struct tm gmt;
         time(&now);
         gmtime_r(&now, &gmt);
         strftime(pRequest->amzDate, sizeof pRequest->amzDate, "X-Amz-Date:%Y%m%dT%H%M%SZ", &gmt);
     }
-    if (pMdContent32) {
-        memmove(pRequest->mdContent32, pMdContent32, 32);
-        pRequest->pContentSha256 = (void *) pRequest->mdContent32;
-    }
 } /* librock_awsRequest_start */
 /**************************************************************/
-
-
-/**************************************************************/
-PRIVATE const char *librock_awsSignature_findCredentials_(struct librock_awsRequest_s *pRequest)
-{//Callers should use librock_awsSignatureVersion4(), not this.
-    /* Set ->pKey and ->cKey */
-
-    pRequest->pKey = pRequest->pAwsCredentialsCsv;
-    
-    /* The Credential Scope */
-    pRequest->pCredentialScopeWithoutDate = pRequest->pAwsCredentialsCsv;
-
-    pRequest->pKey = strchr(pRequest->pKey, ',');
-    if (!pRequest->pKey) {
-        return("E-316 need credentials in AWS IAM format");
-    }
-    pRequest->pKey++;
-
-    /* Access key */
-    pRequest->pAccessKeyId = pRequest->pKey;
-
-    pRequest->pKey = strchr(pRequest->pKey, ',');
-    if (!pRequest->pKey) {
-        return("E-316 need credentials in AWS IAM format");
-    }
-    pRequest->pKey++;
-    pRequest->cKey = countOptionName(pRequest->pKey);
-
-    return 0;
-} /* librock_awsSignature_findCredentials */
-/**************************************************************/
-
 
 
 /**************************************************************/
@@ -534,12 +499,17 @@ PRIVATE const char *librock_awsSignature_parseRequest_(struct librock_awsRequest
                     pRequest->amzDate[0] = '\0';
                 }
             }
-            if (!strncasecmp(pRead, "x-amz-security-token:", 21)) {
-                /* Do not replace from environment */
-                pRequest->pXAmzSecurityToken = (char *) 1;
-            }
             if (!strncasecmp(pRead, "authorization:", 14)) {
                 /* Do not sign */
+            } else if (!strncasecmp(pRead, "x-amz-content-sha256:", 21)) {
+                /* Do not sign */
+                if (pRequest->ppSigningParameters[iSHA256] == (char *) 1) {
+                    pRead += 21;
+                    while(*pRead == ' ') {
+                        pRead++;
+                    }
+                    pRequest->ppSigningParameters[iSHA256] = pRead;
+                }
             } else if (1/*sign everything*/) {
                 if (countToStr(pRead, ":") >= countToEol(pRead)) {
                     return "E-528 malformed header";
@@ -548,21 +518,6 @@ PRIVATE const char *librock_awsSignature_parseRequest_(struct librock_awsRequest
                     pRequest->pListOfHeaders[pRequest->cHeaders] = pRead;
                 }
                 pRequest->cHeaders++;
-            }
-            if (iPass != 0) {
-
-            } else if (!strncasecmp(pRead, "authorization:", 14)) {
-                pRequest->pAuthorization = pRead;
-            } else if (!strncasecmp(pRead, "x-amz-content-sha256:", 21)) {
-                pRead += 21;
-                if (*pRead == ' ') pRead++;
-                if (pRequest->pContentSha256 != (void *) pRequest->mdContent32) {
-                    pRequest->pContentSha256 = pRead;
-                }
-            } else if (!strncasecmp(pRead, "content-type:", 13)) {
-                pRead += 13;
-                if (*pRead == ' ') pRead++;
-                pRequest->pContentType = pRead;
             }
 skip_line:
             while (*pRead && *pRead != '\n') {
@@ -577,24 +532,11 @@ skip_line:
             }
             pRequest->cHeaders++;
         }
-        if (pRequest->pXAmzSecurityToken != (char *) 1) {
-            /* Determine if a security token is needed */
-            if (iPass == 0) {
-                char *pFilledRequest = 0;
-                const char *pErrorMessage = 0;
-                pErrorMessage = librock_fillTemplate(&pFilledRequest,
-                                                    "X-Amz-Security-Token:@eAWS_SECURITY_TOKEN@\n",
-                                                    0, 0, 0);
-                if (pErrorMessage) {
-                    /* Not found. Not needed */
-                } else {
-                   pRequest->pXAmzSecurityToken = pFilledRequest;
-                   pRequest->cHeaders++;
-                }
-            } else if (pRequest->pXAmzSecurityToken) {
-                pRequest->pListOfHeaders[pRequest->cHeaders] = pRequest->pXAmzSecurityToken;
-                pRequest->cHeaders++;
+        if (pRequest->ppSigningParameters[iSECURITY_TOKEN]) {
+            if (iPass == 1) {
+                pRequest->pListOfHeaders[pRequest->cHeaders] = "X-Amz-Security-Token: will_replace";
             }
+            pRequest->cHeaders++;
         }
         if (iPass == 0) {
             /* Because of date, there will be at least one header */
@@ -714,7 +656,7 @@ PRIVATE const char *librock_awsSignature_canonicalQueryString_(struct librock_ap
                 return "E-670 Invalid URI escape";
             }
             ch += (strEncode - strCharacters) & 0x0f;
-            if (!librock_safeAppendUriEncoded0(paParameter, &ch, 1)) {
+            if (!librock_safeAppendUrlEncoded0(paParameter, &ch, 1)) {
                 return "E-601 would overflow pre-allocated block";
             }
             pSource += 3;
@@ -737,7 +679,7 @@ PRIVATE const char *librock_awsSignature_canonicalQueryString_(struct librock_ap
             if (!librock_safeAppend0(paParameter, startChunk, pSource - startChunk)) { 
                 return "E-601 would overflow pre-allocated block";
             }
-            /* URI encoded */
+            /* URL encoded */
             if (!librock_safeAppend0(paParameter, "%XX", 3)) { 
                 return "E-601 would overflow pre-allocated block";
             }
@@ -852,7 +794,7 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
     unsigned char mdCanonicalRequest[32];
     void *pHashInfo = 0;
     struct librock_appendable aParameter;
-
+//    const char *pSha256;
     const char *pCanonicalRequestTemplate = 
         "@1_VERB@\n"
         "@2_URI@\n"
@@ -880,7 +822,11 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
     */
     aParameter.cb = countToEol(pRequest->pURI)*3 + strlen(pRequest->pRequest)*2+200+1; 
     //  This buffer is also reused to create stringToSign, which gets parts of the credentials.
-    aParameter.cb += strlen(pRequest->pAwsCredentialsCsv);
+    aParameter.cb += 22 + 32*2 + 1; /*room for adding x-amz-content-Sha256: */
+    aParameter.cb += strlen(pRequest->ppSigningParameters[iSERVICE_REGION]);
+    aParameter.cb += strlen(pRequest->ppSigningParameters[iSERVICE_NAME]);
+    aParameter.cb += pRequest->ppSigningParameters[iSECURITY_TOKEN] ? strlen(pRequest->ppSigningParameters[iSECURITY_TOKEN]) : 0;
+
     aParameter.p = (char *) malloc(aParameter.cb); 
     if (!aParameter.p) {
         return "E-462 malloc failed";
@@ -942,7 +888,7 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
         int i = 0;
         qsort((void *)pRequest->pListOfHeaders, pRequest->cHeaders, sizeof(char **), qsort_strcasecmp_);
         while (i < pRequest->cHeaders) {
-            int bContent;
+            const char *pReplace = 0;
             pHeader = pRequest->pListOfHeaders[i];
             if (!strncasecmp(pHeader, "x-amz-date:", 11)) {
                 pRequest->pXAmzDate = strchr(pHeader, ':')+1;
@@ -950,17 +896,11 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
                     pRequest->pXAmzDate += 1;
                 }
             }
-            bContent = 0;
-            if (!strncasecmp(pHeader, "x-amz-content-sha256:", 21) && (pRequest->pContentSha256 == (void *) pRequest->mdContent32)) {
-                bContent = 1;
-            }
-            if (0) { //Useful for development
-                (*pRequest->fnDebugOutput)(pRequest->debugOutputId, "I-846:", 6);
-                (*pRequest->fnDebugOutput)(pRequest->debugOutputId, pHeader, countToEol(pHeader));
-                (*pRequest->fnDebugOutput)(pRequest->debugOutputId, "\n", 1);
+            if (!strncasecmp(pHeader, "x-amz-security-token: will_replace", 34)) {
+                pReplace = pRequest->ppSigningParameters[iSECURITY_TOKEN];
             }
 
-            /* lower-casify for signing */
+            /* lower-casify header for signing */
             while (*pHeader != ':') {
                 char *pWrite = (char *) aParameter.p + aParameter.iWriting;
                 if (!librock_safeAppend0(&aParameter, "X", 1)) { 
@@ -980,15 +920,10 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
             }
             pHeader++; /* move beyond ':' */
             pHeader += countLWS(pHeader);
-            if (bContent) {
-                int i = 0;
-                for (i =0;i < 32;i++) {
-                    char *pWrite = librock_safeAppend0(&aParameter, 0/* we will write */, 2);
-                    if (!pWrite) {
-                        freeOnce((void **) & aParameter.p);
-                        return "E-470 would overflow pre-allocated block";
-                    }
-                    bToHex0(pWrite, pRequest->mdContent32[i] & 0xff);
+            if (pReplace) {
+                if (!librock_safeAppend0(&aParameter, pReplace, -1 )) {
+                    freeOnce((void **) & aParameter.p);
+                    return "E-470 would overflow pre-allocated block";
                 }
             } else {
                 const char *pStart = pHeader;
@@ -1090,40 +1025,18 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
     /* Hash of the Request Payload */
     pParameterList[6/*Hash of payload*/] = (char *) aParameter.p + aParameter.iWriting;
     {
-        pRead = pRequest->pContentSha256;
-        if (!pRead) {
+        if (!librock_safeAppend0(&aParameter, pRequest->ppSigningParameters[iSHA256], 32*2)) {
             freeOnce((void **) & pRequest->pSignedHeaders);
             freeOnce((void **) & aParameter.p);
-            return "E-1095 could not determine body or x-amz-content-sha256"; //Can happen on an empty template
-        }
-        if (pRead == (void *) pRequest->mdContent32) {
-            int i = 0;
-            for (i = 0; i < 32; i++) {
-                char *pWrite = librock_safeAppend0(&aParameter, 0/* we will write */, 2);
-                if (!pWrite) {
-                    freeOnce((void **) & pRequest->pSignedHeaders);
-                    freeOnce((void **) & aParameter.p);
-                    return "E-470 would overflow pre-allocated block";
-                }
-                bToHex0(pWrite, pRequest->mdContent32[i] & 0xff);
-            }
-        } else {
-            if (!librock_safeAppend0(&aParameter, pRead, countToEol(pRead))) {
-                freeOnce((void **) & pRequest->pSignedHeaders);
-                freeOnce((void **) & aParameter.p);
-                return "E-470 would overflow pre-allocated block";
-            }
+            return "E-470 would overflow pre-allocated block";
         }
     }
     
-    if (((char *) aParameter.p)[aParameter.iWriting-1] == '\x22') {/* Maybe check for \x22 only if bFormatCURL? */
-        aParameter.iWriting--;
-    }
     ((char *) aParameter.p)[aParameter.iWriting] = '\0';
     
     { /* Create the Canonical request from template */
         char *pCanonicalRequest;
-        const char *pErrorMessage = librock_fillTemplate(&pCanonicalRequest, pCanonicalRequestTemplate, 7, &pParameterList[0], 0);
+        const char *pErrorMessage = librock_fillTemplate(&pCanonicalRequest, pCanonicalRequestTemplate, -1, 0, 7, &pParameterList[0], 0);
         if (pErrorMessage) {
             freeOnce((void **) & pRequest->pSignedHeaders);
             freeOnce((void **) & aParameter.p);
@@ -1189,18 +1102,10 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
             aParameter.iWriting = position;
         }
         
-        if (*(pRequest->pCredentialScopeWithoutDate)!= '/') {
-            if (!librock_safeAppend0(&aParameter, "/", 1)) { 
-                freeOnce((void **) & pRequest->pSignedHeaders);
-                freeOnce((void **) & aParameter.p);
-                return "E-470 would overflow pre-allocated block";
-            }
-        }
-        if (!librock_safeAppend0(&aParameter, pRequest->pCredentialScopeWithoutDate, countToStr(pRequest->pCredentialScopeWithoutDate, ","))) { 
-            freeOnce((void **) & pRequest->pSignedHeaders);
-            freeOnce((void **) & aParameter.p);
-            return "E-470 would overflow pre-allocated block";
-        }
+        librock_safeAppend0(&aParameter, "/", 1);
+        librock_safeAppend0(&aParameter, pRequest->ppSigningParameters[iSERVICE_REGION], -1);
+        librock_safeAppend0(&aParameter, "/", 1);
+        librock_safeAppend0(&aParameter, pRequest->ppSigningParameters[iSERVICE_NAME], -1);
         if (!librock_safeAppend0(&aParameter, "/aws4_request\n", -1)) {
             freeOnce((void **) & pRequest->pSignedHeaders);
             freeOnce((void **) & aParameter.p);
@@ -1250,38 +1155,35 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
             kSigning = HMAC(kService, "aws4_request")
     */
     { /* kDate = HMAC("AWS4" + kSecret, Date) */
-        int cbBuf = pRequest->cKey+4;
+        int cbBuf = strlen(pRequest->ppSigningParameters[iSECRET_ACCESS_KEY])+4;
         char *pConcatKey = (char *) malloc(cbBuf+1);
         if (!pConcatKey) {
             return "E-590 malloc failed";
         }
         memmove(pConcatKey, "AWS4", 4);
-        memmove(pConcatKey+4, pRequest->pKey, pRequest->cKey);
+        memmove(pConcatKey+4, pRequest->ppSigningParameters[iSECRET_ACCESS_KEY], cbBuf-4);
         pConcatKey[cbBuf] = '\0';
 
         librock_hmacSha256(resultSha,
                             pConcatKey,
-                            4+pRequest->cKey,
+                            cbBuf,
                             pRequest->pXAmzDate,
                             strchr(pRequest->pXAmzDate,'T')-pRequest->pXAmzDate);
         freeOnce((void **)&pConcatKey);
     }
     
     {  
-        const char *pRead = pRequest->pCredentialScopeWithoutDate;
-        if (*pRead == '/') {
-            pRead++;
-        }
-        if (!strchr(pRead, '/')) {
-            return "E-596 unexpected format of credential scope";
-        }
+        const char *pRead = 0;
+        
         
         /* kRegion = HMAC(kDate, Region) */
-        librock_hmacSha256(resultSha, resultSha, 32, pRead, strchr(pRead, '/')-pRead);
+        pRead = pRequest->ppSigningParameters[iSERVICE_REGION];
+        librock_hmacSha256(resultSha, resultSha, 32, pRead, strlen(pRead));
         pRead = strchr(pRead, '/')+1;
 
         /* kService = HMAC(kRegion, Service) */
-        librock_hmacSha256(resultSha, resultSha, 32, pRead, countToStr(pRead, ","));
+        pRead = pRequest->ppSigningParameters[iSERVICE_NAME];
+        librock_hmacSha256(resultSha, resultSha, 32, pRead, strlen(pRead));
         
         /* kSigning = HMAC(kService, "aws4_request")*/
         librock_hmacSha256(resultSha, resultSha, 32, "aws4_request", 12);
@@ -1307,8 +1209,16 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
     /* resultSha has the signature. Output with Authorization */
     {
         const char *pHeader = pRequest->pRequest;
-        while (*pHeader) {
+        int didContent = 0;
+        while (*pHeader || !didContent) {
             const char *pStart = pHeader;
+            if (*pHeader == '\0') {
+                if (pRequest->bFormatCURL) {
+                    pStart = "header = \x22x-amz-content-sha256:\x22";
+                } else {
+                    pStart = "x-amz-content-sha256:";
+                }
+            }
             pHeader += countToEol(pHeader);
             if (pRequest->bFormatCURL) {
                 if (isCurlOptionName(pStart, "header")) {
@@ -1322,23 +1232,19 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
             }
             if (!strncasecmp(pStart, "authorization:", 14)) {
                 /* Skip this now. Add it later */
-            } else if (!strncasecmp(pStart, "x-amz-content-sha256:", 21)
-                        && (pRequest->pContentSha256 == (void *) pRequest->mdContent32)) {
-                unsigned int i;
+            } else if (!strncasecmp(pStart, "x-amz-content-sha256:", 21)) {
+                const char *pLiteral;
+                didContent = 1;
                 if (pRequest->bFormatCURL) {
                     pLiteral = "header = \x22x-amz-content-sha256:";
                 } else {
                     pLiteral = "x-amz-content-sha256:";
                 }
                 (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
+            
+                pLiteral = pRequest->ppSigningParameters[iSHA256];
+                (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, 64);
                 
-                for (i = 0; i < sizeof(pRequest->mdContent32); i++) {
-                    char buf[3];
-                    bToHex0(buf, pRequest->mdContent32[i] & 0xff);
-                    (*(pRequest->fnOutput))(pRequest->outputId, buf, 2);
-    //              printf("%02x",pRequest->mdContent32[i] & 0xff);
-                }           
-    //          fwrite(pStart,1,pHeader-pStart,stdout);
                 if (pRequest->bFormatCURL) {
                     (*(pRequest->fnOutput))(pRequest->outputId, "\x22", 1);           
                 }
@@ -1368,13 +1274,16 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
 
         pLiteral = "AWS4-HMAC-SHA256 Credential=";
         (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
-        (*(pRequest->fnOutput))(pRequest->outputId, pRequest->pAccessKeyId, (int) (strchr(pRequest->pAccessKeyId, ',')-pRequest->pAccessKeyId));
+        pLiteral = pRequest->ppSigningParameters[iACCESS_KEY_ID];
+        (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
         (*(pRequest->fnOutput))(pRequest->outputId, "/", 1);
         (*(pRequest->fnOutput))(pRequest->outputId, pRequest->pXAmzDate, (int) (strchr(pRequest->pXAmzDate, 'T')-pRequest->pXAmzDate));
-        if (*(pRequest->pCredentialScopeWithoutDate) != '/') {
-            (*(pRequest->fnOutput))(pRequest->outputId, "/", 1);
-        }
-        (*(pRequest->fnOutput))(pRequest->outputId, pRequest->pCredentialScopeWithoutDate, countToStr(pRequest->pCredentialScopeWithoutDate, ","));
+        (*(pRequest->fnOutput))(pRequest->outputId, "/", 1);
+        pLiteral = pRequest->ppSigningParameters[iSERVICE_REGION];
+        (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
+        (*(pRequest->fnOutput))(pRequest->outputId, "/", 1);
+        pLiteral = pRequest->ppSigningParameters[iSERVICE_NAME];
+        (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
         pLiteral = "/aws4_request";
         (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
         
@@ -1397,16 +1306,19 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
         }
         (*(pRequest->fnOutput))(pRequest->outputId, "\n", 1);
 
-        if (pRequest->pXAmzSecurityToken) {
-            if (pRequest->pXAmzSecurityToken != (char *) 1) {
-                if (pRequest->bFormatCURL) {
-                    pLiteral = "header = \x22";
-                    (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
-                    (*(pRequest->fnOutput))(pRequest->outputId, pRequest->pXAmzSecurityToken, strlen(pRequest->pXAmzSecurityToken));
-                    (*(pRequest->fnOutput))(pRequest->outputId, "\x22\n", 2);
-                } else {
-                    (*(pRequest->fnOutput))(pRequest->outputId, pRequest->pXAmzSecurityToken, strlen(pRequest->pXAmzSecurityToken));
-                }
+        if (pRequest->ppSigningParameters[iSECURITY_TOKEN]) {
+            if (pRequest->bFormatCURL) {
+                pLiteral = "header = \x22X-Amz-Security-Token:";
+                (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
+                pLiteral = pRequest->ppSigningParameters[iSECURITY_TOKEN];
+                (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
+                (*(pRequest->fnOutput))(pRequest->outputId, "\x22\n", 2);
+            } else {
+                pLiteral = "X-Amz-Security-Token:";
+                (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
+                pLiteral = pRequest->ppSigningParameters[iSECURITY_TOKEN];
+                (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
+                (*(pRequest->fnOutput))(pRequest->outputId, "\n", 1);
             }
         }
 
@@ -1433,6 +1345,21 @@ const char *librock_awsBuiltInTemplates[] = {
 
 #include "aws_templates.inc"
 
+#if defined librock_WANT_ALTERNATE_BRANCHING
+/* For branch and line coverage */
+,"@//bad-template.curl;\n@//;"
+    "\n@//.default.bad"
+    "\n@//="
+
+,"@//bad-template2.curl;2016-11-26;MIB SOFTWARE, INC"
+    "\n""@// TEMPLATE PARAMETERS:  None"
+    "\n""url=\"https://s3.amazonaws.com/"
+    "\n""header = \"Host: s3.amazonaws.com\""
+
+,"@//bad-template3.curl;"
+    "\n""@// TEMPLATE PARAMETERS:  None"
+    "\n""@"
+#endif
 ,0 // End of list
 };
 
@@ -1443,9 +1370,9 @@ const char *librock_awsBuiltInTemplate(const char *pName)
     i = 0;
     cName = strlen(pName);
     while(librock_awsBuiltInTemplates[i]) {
-        if (countToEol(librock_awsBuiltInTemplates[i]+3)==cName) {
+        if (countToStr(librock_awsBuiltInTemplates[i]+3,";")==cName) {
             if (!strncmp(pName,librock_awsBuiltInTemplates[i]+3,cName)) {
-                return librock_awsBuiltInTemplates[i]+3+cName+1;
+                return librock_awsBuiltInTemplates[i];
             }
         }
         i++;
@@ -1464,57 +1391,125 @@ PRIVATE int write_to_FILE(void *id, const char *pRead, int len)
     return cWritten;
 } /* write_to_FILE */
 
-PRIVATE const char *putenvNamedDefaults(const char *pRequestTemplate)
+int librock_stringListGetIndex(char ***ppNamedArguments,int cStep, const char *pName, int cName)
+{
+    int expansion = cStep * 32; /* 32 slots at a time */
+    int iString = 0;
+
+    /* Linear search. Is this already set? */
+    while(*ppNamedArguments && (*ppNamedArguments)[iString]) {
+        if (!strncmp(pName,(*ppNamedArguments)[iString],cName) &&
+            (*ppNamedArguments)[iString][cName] == '\0') {
+            /* Matched. It is already set. */
+            return iString;
+        }
+        iString += cStep;
+    }
+    if (!*ppNamedArguments) {
+        iString = -1;
+    }
+    if (iString == -1 || iString % expansion == expansion-cStep) {
+        /* Need to expand */
+        char **ppExpanded;
+        ppExpanded = realloc((void *)*ppNamedArguments, sizeof(char *) * (iString+1+expansion));
+        if (!ppExpanded) {
+            return -1;
+        }
+        *ppNamedArguments = ppExpanded;
+        memset((void *) (*ppNamedArguments + iString + 1), '\0', sizeof(char *) * expansion);
+        if (iString == -1) {
+            iString = 0;
+        }
+    }
+    return iString;
+} /* librock_stringListGetIndex */
+
+PRIVATE const char *putenvNamedDefaults(char ***ppNamedArguments, const char *pRequestTemplate)
 { /* Scan a template for @//.default. entries and call putenv() */
 const char *pRead = pRequestTemplate;
-char *pValue = 0;
-
-while((pRead = strstr(pRead,"@//"))) {
-    if (pRead == strstr(pRead, "@//.default.")) {
-        int cNeeded;
+int cRequestTemplate = strlen(pRequestTemplate);
+while(*pRead) {
+    int cToken = pRequestTemplate + cRequestTemplate - pRead;
+    int iTokenType = atoi(librock_fillTemplateTokenize(pRequestTemplate, pRead - pRequestTemplate, &cToken));
+    if (iTokenType == 1) {//* comment
         int cName;
-        int iError;
-        char *pValue2 = 0;
-        pRead += 12;
-        cNeeded = countToEol(pRead);
-        pValue = malloc(cNeeded+1);
-        if (!pValue) {
-            return "E-1476 malloc failed";
-        }
-        memmove(pValue, pRead, cNeeded);
-        pValue[cNeeded] = '\0';
-
-        /* Only if not already set */
-        cName = countToStr(pValue, "=");
-        if (cName == cNeeded) {
-            freeOnce((void **) &pValue);
-            return "E-1490 must use @//.default.name=value";
-        }
-        pValue[cName] = '\0';
-        pValue2 = mallocNamedValue(pValue);
-        if (!pValue2) {
-            /* Not in the environment, so define it now */
-            pValue[cName] = '=';
-            iError = putenv((char *) pValue);
-            if (GLOBAL_ALTERNATE_BRANCH) {
-                iError = -1;
-            }
-            if (iError) {
-                freeOnce((void **) &pValue);
-                return "E-1479 putenv failed";
+        if (cToken > 12 && !strncmp(pRead,"@//.default.",12)) {
+            pRead += 12;
+            cToken -= 12;
+            cName = countToStr(pRead, "=");
+            
+            if (cName > cToken) {
+                /* Ignore */
             } else {
-                pValue = 0; /* Make permanent */
+                int iString = librock_stringListGetIndex(ppNamedArguments, 2, pRead, cName);
+                if (iString < 0) {
+                    return "E-1522 malloc failed";
+                }
+                if ((*ppNamedArguments)[iString] == 0) {
+                    /* Not found. Add it */
+                    char *pValue = 0;
+                    (*ppNamedArguments)[iString] = malloc(cName+1);
+                    if (!(*ppNamedArguments)[iString]) {
+                        return "E-1522 malloc failed";
+                    }
+                    memmove((*ppNamedArguments)[iString], pRead, cName);
+                    (*ppNamedArguments)[iString][cName] = '\0';
+
+                    pValue = mallocNamedValue((*ppNamedArguments)[iString]);                    
+                    if (!pValue) { /* Not found in environment. Set the default */
+                        pValue = malloc(cToken-cName+1);
+                        if (!pValue) {
+                            return "E-1522 malloc failed";
+                        }
+                        memmove(pValue, pRead+cName+1, cToken-cName);
+                        pValue[cToken-cName-1] = '\0';
+                        pValue[countToEol(pValue)] = '\0';
+                    }
+                    (*ppNamedArguments)[iString+1] = pValue;
+                }
             }
-        } else {
-            freeOnce((void **) &pValue2);
         }
-        freeOnce((void **) &pValue);
+    } else if (iTokenType == 3 && cToken==2) { /* Escaped @@ */
+    } else if (iTokenType == 3) {
+        /* Parameter */
+        pRead++;
+        cToken--;
+        if (*pRead == 'e') {// environment variable
+            int iString;
+            pRead++;
+            cToken--;
+            iString = librock_stringListGetIndex(ppNamedArguments, 2, pRead, cToken-1);
+            if (GLOBAL_ALTERNATE_BRANCH) {
+                iString = -1;
+            }
+            if (iString < 0) {
+                return "E-1522 malloc failed";
+            }
+            if (!(*ppNamedArguments)[iString]) {
+                /* Not already defined */
+                char *pValue;
+                (*ppNamedArguments)[iString] = malloc(cToken);
+                if (!(*ppNamedArguments)[iString]) {
+                    return "E-1522 malloc failed";
+                }
+                memmove((*ppNamedArguments)[iString], pRead, cToken-1);
+                (*ppNamedArguments)[iString][cToken-1] = '\0';
+                pValue = mallocNamedValue((*ppNamedArguments)[iString]);
+                (*ppNamedArguments)[iString+1] = pValue;
+                if (!pValue) { /* Not found in environment. */
+                    freeOnce((void **) &((*ppNamedArguments)[iString]));
+                } else {
+                    (*ppNamedArguments)[iString+1] = pValue;
+                }
+                
+            }
+        }
+        
     }
-    pRead = strchr(pRead,'\n');
-    if (!pRead) { //File does not end with \n.
-        break;
-    }
+    pRead += cToken;
+    
 }
+
 return 0;
 } /* putenvNamedDefaults */
 
@@ -1525,18 +1520,15 @@ int main(int argc, char **argv)
     int bVerbose = 0;
     int scanSignature = 1; /* Look for data and upload-file */
     int fromFile = 0;
+    int iEncodeParameters = 0;
     int credentialsFromEnv = 1;
+    char *signingParameters[6];
     unsigned char mdContent32[] = { /* SHA256 of empty string */
         0xe3,0xb0,0xc4,0x42,0x98,0xfc,0x1c,0x14,0x9a,0xfb,0xf4,0xc8,0x99,0x6f,0xb9,0x24,0x27,0xae,0x41,0xe4,0x64,0x9b,0x93,0x4c,0xa4,0x95,0x99,0x1b,0x78,0x52,0xb8,0x55
     };
     const char *pRequestTemplate = 0;
-    struct librock_appendable aCredentials;
-    
-    char credentials[200];
-    char *pCredentials = credentials;
-    credentials[198] = '\0';
+    char **ppNamedArguments = 0;
 
-    librock_appendableSet(&aCredentials, credentials, sizeof(credentials), 0);
 
 #if defined librock_WANT_ALTERNATE_BRANCHING
     argumentIndex = 1;
@@ -1569,7 +1561,7 @@ int main(int argc, char **argv)
 "\n"
 "\n"" LICENSE:   MIT (Free/OpenSource)"
 "\n" 
-"\n"" STABILITY: UNSTABLE as of 2016-11-22"
+"\n"" STABILITY: UNSTABLE as of 2017-01-17"
 "\n""            Check for updates at: https://github.com/forrestcavalier/awsFillAndSign"
 "\n"              
 "\n"" SUPPORT:   Contact the author for commercial support and consulting at"
@@ -1602,6 +1594,9 @@ int main(int argc, char **argv)
 "\n"
 "\n""  -D <name=value>  Put name=value into the environment."
 "\n"
+"\n""  --encode <flag>  Control percent-encoding. 0 - (default) auto-detect;"
+"\n""                   1 - always percent-encode; -1 - never percent-encode."
+"\n"
 "\n""  -                Marker for end of arguments. (Useful when parameters that"
 "\n""                   follow may start with '-'.)"
 "\n"
@@ -1617,17 +1612,71 @@ int main(int argc, char **argv)
                 i = 1;
                 if (argumentIndex == argc-1) {
                     while(librock_awsBuiltInTemplates[i]) {
-                        fprintf(stdout, "%.*s\n", countToEol(librock_awsBuiltInTemplates[i]+3), librock_awsBuiltInTemplates[i]+3);
+                        fprintf(stdout, "%.*s\n", countToStr(librock_awsBuiltInTemplates[i]+3,";"), librock_awsBuiltInTemplates[i]+3);
                         i++;
                     }
                 } else {
+                    const char *pNext;
+                    const char *pFields;
+                    int cField = 0;
                     pRequestTemplate = (char *) librock_awsBuiltInTemplate(argv[argumentIndex+1]);
                     if (!pRequestTemplate) {
                         fprintf(stderr, "I-1515 no built-in template '%s'\n", argv[argumentIndex+1]);
                         return 9;
                     }
                     fprintf(stdout, "@//%s\n", argv[argumentIndex+1]);
-                    fprintf(stdout, "%s\n", pRequestTemplate);
+
+                    pFields = pRequestTemplate + countToStr(pRequestTemplate,";")+1;
+                    pRequestTemplate += countToStr(pRequestTemplate, "\n")+1;
+                    /* Expand */
+                    pNext = strstr(pRequestTemplate,"REST API DOCS");
+                    if (!pNext) {
+                        pNext = strstr(pRequestTemplate,"TEMPLATE FOR:");
+                    }
+                    if (!pNext) {
+                        pNext = pRequestTemplate;
+                    }
+                    
+                    pNext += countToEol(pNext) + 1;
+                    fprintf(stdout, "%.*s", pNext - pRequestTemplate,pRequestTemplate);
+                    fprintf(stdout, "@//");
+                    fprintf(stdout, "\n@// TEMPLATE REVISION:    ");
+                    cField = countToStr(pFields,";");
+                    if (pFields + cField < pRequestTemplate) {
+                        fprintf(stdout,"%.*s", cField ,pFields);
+                    } else {
+                        cField = pRequestTemplate - pFields - 1;
+                    }
+                    pFields += cField + 1;
+                    cField = countToStr(pFields,";");
+                    if (pFields + cField < pRequestTemplate) {
+                        fprintf(stdout," by %.*s", cField ,pFields);
+                    } else {
+                        cField = pRequestTemplate - pFields - 1;
+                    }
+                    pFields += cField + 1;
+                    fprintf(stdout, "\n@// TEMPLATE LICENSE:     ");
+                    cField = pRequestTemplate-pFields-1;
+                    if (cField > 0) {
+                        fprintf(stdout,"%.*s", cField ,pFields);
+                    }
+                    if (countToStr(pNext,"  @1") < countToStr(pNext,"\n")) {
+                        fprintf(stdout, "\n@// TEMPLATE PARAMETERS:");
+                    }
+                    pRequestTemplate = pNext-1;
+                    pNext = strstr(pRequestTemplate,"\n@//.default.");
+                    if (!pNext) {
+                        pNext = pRequestTemplate + strlen(pRequestTemplate);
+                    }
+                    fprintf(stdout,"%.*s", pNext-pRequestTemplate, pRequestTemplate);
+                    fprintf(stdout,"%s",
+    "\n""@//"
+	"\n""@// (Before using CURL, use awsFillAndSign by MIB SOFTWARE to fill the"
+    "\n""@// template, strip comments, and add headers for AWS Signature version 4.)"
+    "\n""@//"
+    );
+                    fprintf(stdout,"%s", pNext);
+
                     return 0;
                 }
                 return 0;
@@ -1661,6 +1710,13 @@ int main(int argc, char **argv)
                 putenv((char *) pVariable);
             } else if (!strncmp(argv[argumentIndex], "--have-sha256", 3)) {
                 scanSignature = 0;
+            } else if (!strncmp(argv[argumentIndex], "--encode", 8)) {
+                if (argumentIndex + 1 >= argc) {
+                    argumentIndex = argc;
+                    break; //Show usage message
+                }
+                iEncodeParameters = atoi(argv[argumentIndex+1]);
+                argumentIndex++;
             } else if (!strncmp(argv[argumentIndex], "-b", 2)) {
                 const char *pBody = 0;
                 const char *pErrorMessage;
@@ -1729,39 +1785,66 @@ int main(int argc, char **argv)
 
     {
         const char *pMessage = 0;
-        pMessage = putenvNamedDefaults(pRequestTemplate);
+        const char *pName;
+        pMessage = putenvNamedDefaults(&ppNamedArguments, 
+                    "@//.default.QueryExtra=");
         if (pMessage) {
             fprintf(stderr, "%s\n", pMessage);
             return 14;
         }
+
+        pMessage = putenvNamedDefaults(&ppNamedArguments, 
+                    "@eAWS_DEFAULT_REGION@"
+                    ",@eAWS_SERVICE_NAME@"
+                    ",@eAWS_SECURITY_TOKEN@"
+                    ",@eQueryExtra@");
+        if (pMessage) {
+            fprintf(stderr, "%s\n", pMessage);
+            return 14;
+        }
+
+        pMessage = putenvNamedDefaults(&ppNamedArguments, pRequestTemplate);
+        if (pMessage) {
+            fprintf(stderr, "%s\n", pMessage);
+            return 14;
+        }
+        if (!ppNamedArguments) {
+            fprintf(stderr,"E-1879 Must set AWS_DEFAULT_REGION and AWS_SERVICE_NAME\n");
+            return 14;
+        }
+
+        signingParameters[iSHA256] = 0; //Set below
+        pName = "AWS_DEFAULT_REGION";
+        signingParameters[iSERVICE_REGION] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+        pName = "AWS_SERVICE_NAME";
+        signingParameters[iSERVICE_NAME] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+        pName = "AWS_SECURITY_TOKEN";
+        signingParameters[iSECURITY_TOKEN] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
     }
     
     /* Format @eAWS_DEFAULT_REGION@/@eAWS_SERVICE_NAME@,@eAWS_ACCESS_KEY_ID@,@eAWS_SECRET_ACCESS_KEY@ into credentials buffer */
     {
         const char *pMessage = 0;
-        char *pValue = 0;
-        char *pFormat;
-        int iError;
         if (credentialsFromEnv) {
-            pFormat = "@eAWS_DEFAULT_REGION@/@eAWS_SERVICE_NAME@,@eAWS_ACCESS_KEY_ID@,@eAWS_SECRET_ACCESS_KEY@";
-        } else {
-            pFormat = "@eAWS_DEFAULT_REGION@/@eAWS_SERVICE_NAME@,";
+            const char *pName;
+            pMessage = putenvNamedDefaults(&ppNamedArguments, 
+                    "@eAWS_ACCESS_KEY_ID@,@eAWS_SECRET_ACCESS_KEY@");
+            if (!pMessage) {
+                pName = "AWS_ACCESS_KEY_ID";
+                signingParameters[iACCESS_KEY_ID] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+                pName = "AWS_SECRET_ACCESS_KEY";
+                signingParameters[iSECRET_ACCESS_KEY] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+            }
         }
-        pMessage = librock_fillTemplate(&pValue, pFormat, 0, 0, &iError);
+
         if (pMessage) {
-            int cContext = countToEol(pFormat + iError);
-            if (countToStr(pFormat+iError,"@") < cContext) {
-                cContext = countToStr(pFormat+iError,"@");
-            }
-            fprintf(stderr, "%s at %.*s\n", pMessage, cContext, pFormat + iError);
+            fprintf(stderr, "%s\n", pMessage);
             return 14;
-        } else {
-            if (!librock_safeAppend0(&aCredentials, pValue, strlen(pValue))) {
-                pMessage = "I-1649 credentials would overflow fixed buffer";
-            }
         }
-        freeOnce((void **) &pValue);
         if (!credentialsFromEnv) {
+            char credentials[200];
+            credentials[198] = '\0';
+
             /* Get comma-separated credentials on stdin, which must have this form. Lengths may vary.
                   AXXXXXXXXXXXXXXXXXXX,7777777777777777777777777777777777777777
              There must be no quote characters or spaces.
@@ -1772,8 +1855,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "I-1737 reading credentials on stdin\n");
             }
 
-            pCredentials = fgets(aCredentials.p+aCredentials.iWriting,
-                                 aCredentials.cb - aCredentials.iWriting-1, stdin);
+            pCredentials = fgets(credentials,sizeof(credentials)-1, stdin);
             
             if (GLOBAL_ALTERNATE_BRANCH) {
                 pCredentials = 0;
@@ -1782,26 +1864,37 @@ int main(int argc, char **argv)
                 perror("E-1163 Could not read credentials string");
                 return 5;
             }
-            if (aCredentials.iWriting + strlen(pCredentials) >= aCredentials.cb - 2) {
-                fprintf(stderr, "E-1167 The credentials string is too long\n");
+            if (strlen(credentials) >= sizeof(credentials) - 2) {
+                fprintf(stderr, "E-1167 The credentials string on stdin is too long\n");
                 return 6;
             }
+            if (!strchr(credentials,',')) {
+                fprintf(stderr, "E-1956 Need comma-separated credentials on stdin\n");
+                return 16;
+            }
+            credentials[countToEol(credentials)] = '\0'; /* Remove \r or EOL */
+            *(strchr(credentials, ',')) = '\0'; /* Split string */
+
+            signingParameters[iACCESS_KEY_ID] = credentials;
+            signingParameters[iSECRET_ACCESS_KEY] = credentials+strlen(credentials)+1;
+            
         }
-        if (pMessage) {
-            fprintf(stderr, "%s\n", pMessage);
-            return 14;
-        }
+        
     }
     //Output nothing on error. Don't want to send a request that will be rejected.
-//    fprintf(stderr, "I-1789_DO_NOT_COMMIT credentials %s\n", credentials);
 
     argumentIndex++; /* Advance to template parameters */
 
     {
         char *pFilledRequest = 0;
         const char *pErrorMessage = 0;
+        char *pSHA256 = 0;
+
         int iError;
+        
         pErrorMessage = librock_fillTemplate(&pFilledRequest, pRequestTemplate,
+                                                iEncodeParameters,
+                                                ppNamedArguments,
                                                 argc-argumentIndex+1, argv+argumentIndex-1,
                                                 &iError);
         if (pErrorMessage) {
@@ -1811,10 +1904,13 @@ int main(int argc, char **argv)
                     cContext = countToStr(pRequestTemplate + iError,"@");
                 }
             }
-            fprintf(stderr, "%s at %.*s\n", pErrorMessage, cContext, pRequestTemplate + iError);
+            fprintf(stderr, "%s at %d:%.*s\n", pErrorMessage, iError, cContext, pRequestTemplate + iError);
             return 4;
         }
-        if (scanSignature==1) {
+        if (scanSignature==0) {
+            /* Get from template */
+            signingParameters[iSHA256] = (char *) 1;
+        } else if (scanSignature==1) {
             /* Find an upload-file or data= field in the request. */
             const char *pRead = pFilledRequest;
             while(pRead) {
@@ -1892,17 +1988,29 @@ int main(int argc, char **argv)
                 if (pRead) {
                     pRead++;
                 }
+                
             }
             if (!pRead) {
                 // Presume empty body is OK.
-                scanSignature = 0;
             }
         }
-
+        if (scanSignature == 1 || scanSignature == 2) {
+            int i;
+            pSHA256 = malloc(64+1);
+            if (!pSHA256) {
+                fprintf(stderr, "E-2079 malloc failed\n");
+                return 15;
+            }
+            for (i = 0; i < 32; i++) {
+                bToHex0(pSHA256 + i*2, mdContent32[i] & 0xff);
+            }
+            pSHA256[32*2] = '\0';
+            signingParameters[iSHA256] = pSHA256;
+        }
+        
         pErrorMessage = librock_awsFillAndSign(
                                pFilledRequest
-                               , scanSignature ? &mdContent32[0] : 0 /*32 bytes, SHA256 of body */
-                               , pCredentials/*,credentials scope WithoutDate*/
+                               , (const char **) signingParameters
                                , write_to_FILE, stdout
                                , bVerbose ? write_to_FILE : 0, stderr);
         if (pErrorMessage) {
@@ -1910,6 +2018,7 @@ int main(int argc, char **argv)
             return 7;
         }
         freeOnce((void **)&pFilledRequest);
+        freeOnce((void **)&pSHA256);
     }
     return 0;
 }
@@ -2032,7 +2141,7 @@ int main(int argc, char **argv)
     { /* If cSource == -1, set cSource = strlen(pSource).
          If pAppendable->p is 0, increment pAppendable->cb by cSource.
          Otherwise do bounds-checked memmove into a buffer. 
-            If out of bounds, do nothing and return 0.
+            If would be out of bounds, do as much as possible and return 0.
             Otherwise: memmove into buffer at the write position,
             follow with a terminating '\0', and
             update the write position.
@@ -2057,9 +2166,18 @@ int main(int argc, char **argv)
         if (pAppendable->iWriting < 0) { /* validate */
             return 0; // Caller incorrectly set iWriting.
         }
-        if (pAppendable->iWriting + cSource + 1 > pAppendable->cb) { /* Will not fit with \0 terminator */
-            /* TODO: This implementation does not support realloc. */
-            return 0; // Would overflow.
+        if (pAppendable->iWriting + cSource + 1 > pAppendable->cb) {
+            /* Will not fit with \0 terminator */
+
+            /* TODO: This implementation does not support realloc,
+               so limit what we copy.
+            */
+            if (pSource && pAppendable->cb - pAppendable->iWriting - 1 > 0) {
+                memmove((char *)pAppendable->p + pAppendable->iWriting, pSource, pAppendable->cb - pAppendable->iWriting - 1);
+            }
+            pAppendable->iWriting = pAppendable->cb; /* Indicate error */
+            ((char *) pAppendable->p)[pAppendable->iWriting-1] = '\0';
+            return 0;
         }
         if (pSource) {
             memmove((char *)pAppendable->p + pAppendable->iWriting, pSource, cSource);
@@ -2086,8 +2204,9 @@ int main(int argc, char **argv)
         }
         if (getenv_s(&ret, pAppendable->p + pAppendable->iWriting,
                     pAppendable->cb - pAppendable->iWriting, pName)) {
-
-            return 0; // Would overflow.
+            // Would overflow
+            pAppendable->iWriting = pAppendable->cb - 1;
+            return 0;
         }
         if (!ret) {
             /* Environment variable not found */
@@ -2113,16 +2232,19 @@ int main(int argc, char **argv)
             return pAppendable->p + pAppendable->iWriting;
         }
         length = strlen(pRead);
-        if (pAppendable->iWriting > pAppendable->cb - length - 1) {
-            return 0; // Would overflow.
-        }
         if (! (pAppendable->p)) { // Calculate size only
             pAppendable->cb += length;
             return (char *) 1;
         }
+        if (pAppendable->iWriting > pAppendable->cb - length - 1) {
+            length = pAppendable->cb - pAppendable->iWriting - 1;
+        }
         memmove(pAppendable->p + pAppendable->iWriting, pRead, length);
         pAppendable->iWriting += length;
         ((char *)pAppendable->p)[pAppendable->iWriting] = '\0';
+        if (pAppendable->iWriting + 1 >= pAppendable->cb) {
+            return 0;
+        }
         return pAppendable->p + pAppendable->iWriting;//No Error
 #endif
         
@@ -2152,18 +2274,17 @@ int main(int argc, char **argv)
         pWrite[2] = '\0';
     }
 
-PRIVATE char *librock_safeAppendUriEncoded0(struct librock_appendable *pAppendable, const char *pSource, int cSource)
+PRIVATE char *librock_safeAppendUrlEncoded0(struct librock_appendable *pAppendable, const char *pSource, int cSource)
 {  /* If pAppendable->p is 0, increment pAppendable->cb for what is needed
-      to URI-encode cSource bytes of pSource.
+      to URL-encode cSource bytes of pSource.
 
-      Otherwise, bounds-checked URI-encode into a buffer, follow with a terminating
+      Otherwise, bounds-checked URL-encode into a buffer, follow with a terminating
       '\0', update the write position, and return a pointer to the first
       character written. 
       
-      If the buffer would overflow, reset the write position, and return 0.
+      If the buffer would overflow, set the write position to the last location, and return 0.
       
     */
-    int cStartWriting = pAppendable->iWriting;
     const char *pRead = pSource;
     const char *pStart = pRead;
     if (cSource == -1) {
@@ -2178,7 +2299,7 @@ PRIVATE char *librock_safeAppendUriEncoded0(struct librock_appendable *pAppendab
             ||(ch == '-')
             ||(ch == '_')
             ||(ch == '~')) {
-            /* No URI-encoding required */
+            /* No URL-encoding required */
             pRead++;
         } else {
             /* Need to encode */
@@ -2186,14 +2307,12 @@ PRIVATE char *librock_safeAppendUriEncoded0(struct librock_appendable *pAppendab
             /* First, catch up on non-encoded characters */
             if (pRead > pStart) {
                 if (!librock_safeAppend0(pAppendable, pStart, pRead - pStart)) {
-                    pAppendable->iWriting = cStartWriting;
                     return 0;
                 }
             }
             
             /* Ensure room */
             if (!librock_safeAppend0(pAppendable, "%XX", 3)) {
-                pAppendable->iWriting = cStartWriting;
                 return 0;
             }
             if (pAppendable->p) {
@@ -2205,11 +2324,13 @@ PRIVATE char *librock_safeAppendUriEncoded0(struct librock_appendable *pAppendab
     }
     if (pRead > pStart) {
         if (!librock_safeAppend0(pAppendable, pStart, pRead - pStart)) {
-            pAppendable->iWriting = cStartWriting;
             return 0;
         }
     }
-    
+    if (! (pAppendable->p)) { // Calculate size only
+        return (char *) 1;
+    }
+
     return (char *)pAppendable->p + pAppendable->iWriting - cSource;
 }
 
@@ -2241,15 +2362,81 @@ PRIVATE char *mallocNamedValue(const char *pName)
 #endif
     return pValue;
 }
-PRIVATE const char *librock_fillTemplate(char **ppFilled, const char *pTemplate, int argc, char * const * const argv,int *pErrorIndex)
+
+PRIVATE const char *librock_fillTemplateTokenize(
+        const char *pTemplate,
+        int iOffset,
+        int *pCount
+        )
+{ //DEBUG: reuse
+    const char *pRead = pTemplate + iOffset;
+    const char *pNext = memchr(pRead,'@',*pCount);
+    if (GLOBAL_ALTERNATE_BRANCH) {
+        return "999-error";
+    }
+    if (!pNext) {
+        return "0-body";
+    }
+    if (pNext > pRead) {
+        *pCount = pNext - pRead;
+        return "0-body";
+    }
+    /* We start at '@' */
+    if (*pCount >=2 && pRead[1] == '/' && pRead[2] == '/') {//  '@//' is comment to end of line.
+        pNext = memchr(pRead,'\n',*pCount);
+        if (pNext) {
+            if (pRead == pTemplate || pRead[-1] == '\n') {
+                //Entire line is comment. Remove it.
+                *pCount = pNext - pRead + 1;
+            } else {
+                *pCount = pNext - pRead;
+            }
+        }
+        return "1-comment";
+    }
+    pNext = memchr(pRead+1,'@',*pCount-1);
+    if (!pNext) {
+        return "2-Error-non-closing";
+    }
+    *pCount = pNext+1 - pRead;
+    return "3-parameter";
+} /* librock_fillTemplateTokenize */
+
+PRIVATE int needEncoding(const char *pValue)
+{
+    const char *pRead = strchr(pValue,'%');
+    const char *valid = "0123456789ABCDEFabcdef";
+    if (!pRead) {
+        /* Doesn't look URL-encoded already. Encode it */
+        return 1;
+    }
+    if (!strchr(valid,pRead[1])) {
+        /* Definitely not URL-encoded already. Encode it. */
+        return 1;
+    }
+    if (!strchr(valid,pRead[2])) {
+        /* Definitely not URL-encoded already. Encode it. */
+        return 1;
+    }
+    /* Presume already encoded properly */
+    return 0;
+}
+
+PRIVATE const char *librock_fillTemplate(
+                    char **ppFilled,
+                    const char *pTemplate,
+                    int iEncodeParameters,
+                    char * * namedArguments,
+                    int argc, char * const * const argv,int *pErrorIndex)
 { //DEBUG: reuse
     int pass; //two passes.
     struct librock_appendable aFilled;
     int dummy = 0;
+    int cTemplate = strlen(pTemplate);
     if (!pErrorIndex) {
         pErrorIndex = &dummy;
     }
-    librock_appendableSet(&aFilled, 0, 0, 0);
+    librock_appendableSet(&aFilled, 0, 0, 0); /* First pass: just count */
     for (pass = 0;pass < 2;pass++) {
         /* First pass we determine necessary size */
         const char *pRead = pTemplate;
@@ -2265,113 +2452,94 @@ PRIVATE const char *librock_fillTemplate(char **ppFilled, const char *pTemplate,
         }
         while (*pRead) {
             /* Work in segments */
-            const char *pStart = pRead;
-
-            pRead = strchr(pRead, '@');
-            if (!pRead) {
+            int cToken;
+            const char *pTokenType;
+            int iTokenType;
+            cToken = pTemplate + cTemplate - pRead;
+            
+            pTokenType = librock_fillTemplateTokenize(pTemplate, pRead - pTemplate, &cToken);
+            iTokenType = atoi(pTokenType);
+            
+            if (iTokenType == 0) {
                 /* Append rest */
-                if (!librock_safeAppend0(&aFilled, pStart, -1)) {
+                if (!librock_safeAppend0(&aFilled, pRead, cToken)) {
                     pErrorMessage = "E-2049 would overflow pre-allocated block";
-                    pRead = pStart;
+                    break;
                 }
+            } else if (iTokenType == 1) {
+                /* Comment */
+            } else if (iTokenType == 2) {
+                /* Error: non-closing */
+                pErrorMessage = "E-1153 unmatched @ in template";
                 break;
-            }
-            if (!librock_safeAppend0(&aFilled, pStart, pRead-pStart)) {
-                pErrorMessage = "E-2049 would overflow pre-allocated block";
-            }
-
-            if (pErrorMessage) {
-            } else if (pRead[1] == '/' && pRead[2] == '/') {//  '@//' is comment to end of line.
-                if (strchr(pRead, '\n')) {
-                    if (pRead == pTemplate || pRead[-1] == '\n') {
-                        //Trim the \n also
-                        pRead = strchr(pRead, '\n')+1;
-                    } else  {
-                        //Retain the \n
-                        pRead = strchr(pRead, '\n');
-                    }
-                } else { //To end of string
-                    pRead += strlen(pRead);
-                }
-            } else if (pRead[1] == '@') {
-                // double '@@' is copied as single '@'
-                pRead += 2;
+            } else if (iTokenType == 3 && cToken==2) { /* Escaped @@ */
                 if (!librock_safeAppend0(&aFilled, "@", 1)) {
                     pErrorMessage = "E-2049 would overflow pre-allocated block";
+                    break;
                 }
-            } else { /* Replaceable parameter */
-                const char *pNext;
-                pNext = strchr(pRead+1, '@');
-                if (!pNext) {
-                    pErrorMessage = "E-1153 unmatched @ in template";
-                } else if (pRead[1] == 'e') {// environment variable
-                    int bUriEncode = 0;
-                    char *pName = (char *)malloc(pNext-pRead+1);
-                    char *pValue = 0;
-
-                    if (!pName) {
-                        pErrorMessage = "E-1153 unmatched @ in template";
-                    } else {
-                        pRead += 2;
-                        if (*pRead == 'u') {
-                            bUriEncode = 1;
-                            pRead++;
-                        }
-                        /* Copy the name */
-                        memmove(pName, pRead, pNext-pRead);
-                        pName[pNext-pRead] = '\0';
-
-                        pValue = mallocNamedValue(pName);
-                    
-                        if (!pValue) {
-                            pErrorMessage = "E-1999 named value not found in environment";
-                        }
-                    }
-                    if (pErrorMessage) {
-                    } else if (bUriEncode) {
-                        if (!librock_safeAppendUriEncoded0(&aFilled, pValue, strlen(pValue))) {
-                            pErrorMessage = "E-2049 would overflow pre-allocated block";
-                        }
-                    } else {
-                        if (!librock_safeAppend0(&aFilled, pValue,strlen(pValue))) {
-                            pErrorMessage = "E-2049 would overflow pre-allocated block";
-                        }
-                    }
-                    if (!pErrorMessage) {
-                        pRead = pNext+1;
-                    }
-                    freeOnce((void **) &pValue);
-                    freeOnce((void **) &pName);
-                } else { 
-                    int iParameter;
-                    int bUriEncode = 0;
+            } else if (iTokenType == 3) {
+                /* Parameter */
+                const char *pValue = 0;
+                int iEncodeThis = iEncodeParameters;
+                
+                if (pRead[1] == 'p') {
                     pRead++;
-                    if (*pRead == 'u') {
-                        bUriEncode = 1;
-                        pRead++;
+                    cToken--;
+                    iEncodeThis = -1;
+                }
+                if (pRead[1] == 'e') {// environment variable
+                    int iString;
+                    pRead += 2;
+                    cToken -= 2;
+
+                    /* Copy the name */
+                    iString = librock_stringListGetIndex(&namedArguments, 2, pRead, cToken-1);
+                    if (GLOBAL_ALTERNATE_BRANCH) {
+                        iString = -1;
                     }
+                    if (iString < 0) {
+                        pErrorMessage = "E-2558 malloc failed";
+                    } else if (namedArguments[iString] == 0) {
+                        pErrorMessage = "E-2571 named value not found in environment";
+                    } else {
+                        pValue = namedArguments[iString+1];
+                    }
+                } else { /* Numeric parameter */
+                    int iParameter;
+                    pRead++;
+                    cToken--;
                     if (!strchr("0123456789", *pRead)) {
                         pErrorMessage = "E-1811 non-numeric replaceable @parameter@ in template";
                     } else {
                         iParameter = atoi(pRead);
                         if (iParameter >= argc) {
                             pErrorMessage = "E-1157 parameter index out of range";
+                        } else {
+                            pValue = argv[iParameter];
                         }
                     }
-                    if (!pErrorMessage) {
-                        pRead = pNext + 1;
-
-                        if (bUriEncode) {
-                            librock_safeAppendUriEncoded0(&aFilled, argv[iParameter], -1);
-                        } else {
-                            librock_safeAppend0(&aFilled, argv[iParameter], -1);
+                    
+                }
+                if (!pErrorMessage) {
+                    if (iEncodeThis==1 
+                        || (iEncodeThis == 0 && needEncoding(pValue)) ) {
+                        if (!librock_safeAppendUrlEncoded0(&aFilled, pValue, strlen(pValue))) {
+                            pErrorMessage = "E-2049 would overflow pre-allocated block";
+                        }
+                    } else {
+                        if (!librock_safeAppend0(&aFilled, pValue, strlen(pValue))) {
+                            pErrorMessage = "E-2049 would overflow pre-allocated block";
                         }
                     }
                 }
+
+            } else {
+                pErrorMessage = "E-2512 unrecognized template syntax";
             }
             if (pErrorMessage) {
                 break;
             }
+            pRead += cToken;
         } /* while parse template */
         if (pErrorMessage) {
             *pErrorIndex = pRead - pTemplate;
