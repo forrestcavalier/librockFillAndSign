@@ -1,0 +1,2 @@
+@//test-raw10.txt Test of malloc fail
+GET /@eAWS_SERVICE_NAME@.txt
