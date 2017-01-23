@@ -90,8 +90,7 @@ echo y,z | ./awsFillAndSign -Dtest=74 --read-key --verbose -DCLParam=%%test --fr
 echo y,z | ./awsFillAndSign -Dtest=76 --read-key --verbose -DCLParam=%%test --from-file tests/test-raw3.txt 2>>tests/$FIFILE
 # No headers
 echo y,z | ./awsFillAndSign -Dtest=78 --read-key --verbose -DCLParam=%%test --from-file tests/test-raw5.txt 2>>tests/$FIFILE
-
-# cat tests/$FIFILE
+if [ "$SHOW_MISC" = "true" ]; then cat tests/$FIFILE; fi
 
 echo "librock_safeAppend0 1" >librock_armAlternateBranch.txt
 export FIFILE=coverageSA0.err
@@ -102,6 +101,7 @@ while [ -f librock_armAlternateBranch.txt ]
     cat librock_armAlternateBranch.txt 2>>tests/$FIFILE
     echo y,z | ./awsFillAndSign --read-key --verbose -DCLParam=%%test --from-file tests/test-raw2.txt param1@ 2>>tests/$FIFILE
   done
+if [ "$SHOW_SA" = "true" ]; then cat tests/$FIFILE; fi
 
 echo "librock_safeAppend0 1" >librock_armAlternateBranch.txt
 export FIFILE=coverageSA0two.err
@@ -112,6 +112,7 @@ while [ -f librock_armAlternateBranch.txt ]
     cat librock_armAlternateBranch.txt 2>>tests/$FIFILE
     echo y,z | ./awsFillAndSign --read-key --verbose -D missingCLParam=%%test --from-file tests/test-raw.txt param1@ 2>>tests/$FIFILE
   done
+if [ "$SHOW_SA2" = "true" ]; then cat tests/$FIFILE; fi
 
 # upload file with failed malloc
 echo 'librock_safeAppend0 1' >librock_armAlternateBranch.txt
@@ -123,6 +124,7 @@ do
     cat librock_armAlternateBranch.txt 2>>tests/$FIFILE
     ./awsFillAndSign --verbose aws-s3-put.curl bucket tests/awsFillAndSignTest.txt test.txt 2>>tests/$FIFILE
   done
+if [ "$SHOW_SA3" = "true" ]; then cat tests/$FIFILE; fi
 
 
 
@@ -135,6 +137,7 @@ do
     cat librock_armAlternateBranch.txt 2>>tests/$FIFILE
     ./awsFillAndSign --verbose aws-ec2-describe-instances.curl 2>>tests/$FIFILE
   done
+if [ "$SHOW_MALLOC" = "true" ]; then cat tests/$FIFILE; fi
 
 echo "malloc 1" >librock_armAlternateBranch.txt
 export FIFILE=coverageMalloc2.err
@@ -145,6 +148,7 @@ do
     cat librock_armAlternateBranch.txt 2>>tests/$FIFILE
     echo y,z | ./awsFillAndSign --read-key --verbose -DCLParam=%%test --from-file tests/test-raw2.txt param1@ 2>>tests/$FIFILE
   done
+if [ "$SHOW_MALLOC2" = "true" ]; then cat tests/$FIFILE; fi
 
 # upload file with failed malloc
 echo "malloc 1" >librock_armAlternateBranch.txt
@@ -156,6 +160,7 @@ do
     cat librock_armAlternateBranch.txt 2>>tests/$FIFILE
     ./awsFillAndSign --verbose aws-s3-put.curl bucket tests/awsFillAndSignTest.txt test.txt 2>>tests/$FIFILE
   done
+if [ "$SHOW_MALLOC3" = "true" ]; then cat tests/$FIFILE; fi
 
 # stringListGetIndex failure. Uses realloc, not malloc.
 echo "global 1" >librock_armAlternateBranch.txt
@@ -167,6 +172,7 @@ do
     cat librock_armAlternateBranch.txt 2>>tests/$FIFILE
     ./awsFillAndSign --verbose --from-file tests/test-raw10.txt 2>>tests/$FIFILE
   done
+if [ "$SHOW_MALLOC4" = "true" ]; then cat tests/$FIFILE; fi
 
 
 echo "global 1" >librock_armAlternateBranch.txt
@@ -178,6 +184,7 @@ do
     cat librock_armAlternateBranch.txt 2>>tests/$FIFILE
     ./awsFillAndSign --verbose aws-ec2-describe-instances.curl 2>>tests/$FIFILE
   done
+if [ "$SHOW_GLOBAL" = "true" ]; then cat tests/$FIFILE; fi
 
 echo "global 1" >librock_armAlternateBranch.txt
 export FIFILE=coverageGlobal2.err
@@ -188,6 +195,7 @@ while [ -f librock_armAlternateBranch.txt ]
     cat librock_armAlternateBranch.txt 2>>tests/$FIFILE
     echo y,z | ./awsFillAndSign --read-key --verbose -DCLParam=%%test --from-file tests/test-raw2.txt param1@ 2>>tests/$FIFILE
   done
+if [ "$SHOW_GLOBAL2" = "true" ]; then cat tests/$FIFILE; fi
 
 gcov -b awsFillAndSign.c
 gcov -b hmacsha256.c
