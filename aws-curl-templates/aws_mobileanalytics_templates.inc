@@ -21,7 +21,7 @@
 //http://docs.aws.amazon.com/mobileanalytics/latest/ug/incorporating-mobile-analytics.html
 
 
-,"@//aws-mobile-analytics-apps.curl"
+,"@//aws-mobile-analytics-apps.curl;"
     "\n""@// TEMPLATE FOR:  AWS Mobile Analytics Getting a List of Apps"
     "\n""@// REST API DOCS: http://docs.aws.amazon.com/mobileanalytics/latest/ug/drs-getting-apps.html"
     "\n""@//"

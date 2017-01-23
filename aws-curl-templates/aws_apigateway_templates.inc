@@ -20,7 +20,7 @@
  */
 //https://docs.aws.amazon.com/apigateway/api-reference/resource/
 
-,"@//aws-apigateway-account.curl"
+,"@//aws-apigateway-account.curl;"
     "\n""@// TEMPLATE FOR:  AWS API Gateway Account"
     "\n""@// REST API DOCS: https://docs.aws.amazon.com/apigateway/api-reference/resource/account/"
     "\n""@//"

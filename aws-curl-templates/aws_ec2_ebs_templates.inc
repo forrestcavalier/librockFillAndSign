@@ -214,7 +214,7 @@ Elastic Block Store
     "\n""header = \"Authorization: AWS4-HMAC-SHA256 Credential=...,SignedHeaders=...,Signature=... (all will be replaced)\""
 
 */
-,"@//aws-ec2-describe-volumes.curl"
+,"@//aws-ec2-describe-volumes.curl;"
     "\n""@// Template for an AWS REST API request using CURL."
     "\n""@//"
     "\n""@// TEMPLATE FOR:  AWS EC2 DescribeVolumes"
