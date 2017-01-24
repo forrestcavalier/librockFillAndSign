@@ -153,7 +153,7 @@ int librock_coverage_main()
             );
         fprintf(stderr,"I-2402 %s\n", pString ? pString : "");
 
-        pSigningParameters[1] = "test";
+        pSigningParameters[1] = "test1";
         pString = librock_awsFillAndSign(
             "request"
             ,pSigningParameters
@@ -163,7 +163,7 @@ int librock_coverage_main()
             ,0
             );
         fprintf(stderr,"I-2402 %s\n", pString ? pString : "");
-        pSigningParameters[2] = "test";
+        pSigningParameters[2] = "test2";
         pString = librock_awsFillAndSign(
             "request"
             ,pSigningParameters
@@ -173,7 +173,7 @@ int librock_coverage_main()
             ,0
             );
         fprintf(stderr,"I-2402 %s\n", pString ? pString : "");
-        pSigningParameters[4] = "test";
+        pSigningParameters[4] = "test4";
         pString = librock_awsFillAndSign(
             "request"
             ,pSigningParameters
@@ -183,13 +183,12 @@ int librock_coverage_main()
             ,0
             );
         fprintf(stderr,"I-185 %s\n", pString ? pString : "");
-        pSigningParameters[5] = "test";
+        pSigningParameters[5] = "test5";
         pString = librock_awsFillAndSign(
             "request"
             ,pSigningParameters
             , write_to_FILE, stdout
-            ,0
-            ,0
+            , write_to_FILE, stderr
             );
         fprintf(stderr,"I-195 %s\n", pString ? pString : "");
 
@@ -204,6 +203,7 @@ int librock_coverage_main()
         }
         iString = librock_stringListGetIndex(&ppStringList, 1, "test2", 4);
     }
+    fprintf(stderr,"I-206\n");
     if (1) {
         struct librock_appendable aBuffer;
         char credentials[200];
@@ -250,9 +250,11 @@ int librock_coverage_main()
         librock_awsSignature_canonicalQueryString_(&aBuffer, &pRead, 0);
  
     }
+    fprintf(stderr,"I-253\n");
     countToEol("\r");
     countToValue("");
     countLWS(" \t");
+    fprintf(stderr,"I-257\n");
     time(0);
     return 0;
 } /* librock_coverage_main */
