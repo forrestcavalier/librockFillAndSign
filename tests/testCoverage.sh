@@ -40,7 +40,7 @@ echo "x/x,y,zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz" 
 # Upload file
 ./awsFillAndSign -Dtest=34 -bFileDoesNotExist aws-s3-put.curl bucket tests/awsFillAndSignTest.txt tests/test.txt 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=35 -b tests/awsFillAndSignTest.txt aws-s3-put.curl bucket tests/awsFillAndSignTest.txt tests/test.txt 2>>tests/$FIFILE
-./awsFillAndSign -Dtest=36 --have-sha256 -DCLparam=test --from-file tests/test-raw.txt @param1 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=36 --have-sha256 -DCLParam=test --from-file tests/test-raw.txt @param1 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=37 aws-s3-put.curl bucket tests/awsFillAndSignTest.txt tests/test.txt 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=38 aws-s3-list.curl bucket tests/awsFillAndSignTest.txt tests/test.txt 2>>tests/$FIFILE
 
