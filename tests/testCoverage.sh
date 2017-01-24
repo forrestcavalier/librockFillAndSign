@@ -54,9 +54,9 @@ echo x,zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
 
 # escapes and parameter testing.
 echo y,z | ./awsFillAndSign 2>>tests/$FIFILE
-echo y,z | ./awsFillAndSign -Dtest=45a --encode 0 --read-key -DCLParam=%20st --from-file tests/test-raw.txt param1 2>>tests/$FIFILE
-echo y,z | ./awsFillAndSign -Dtest=45b --encode 1 --read-key -DCLParam=%20st --from-file tests/test-raw.txt param1 2>>tests/$FIFILE
-echo y,z | ./awsFillAndSign -Dtest=45c --encode -1 --read-key -DCLParam=%20st --from-file tests/test-raw.txt param1 2>>tests/$FIFILE
+echo y,z | ./awsFillAndSign -Dtest=45a --verbose --encode 0 --read-key -DCLParam=%20st --from-file tests/test-raw.txt param1 2>>tests/$FIFILE
+echo y,z | ./awsFillAndSign -Dtest=45b --verbose --encode 1 --read-key -DCLParam=%20st --from-file tests/test-raw.txt param1 2>>tests/$FIFILE
+echo y,z | ./awsFillAndSign -Dtest=45c --verbose --encode -1 --read-key -DCLParam=%20st --from-file tests/test-raw.txt param1 2>>tests/$FIFILE
 echo y,z | ./awsFillAndSign -Dtest=45d --encode 2>>tests/$FIFILE
 echo y,z | ./awsFillAndSign -Dtest=49 --read-key --verbose 2>>tests/$FIFILE
 echo y,z | ./awsFillAndSign -Dtest=50 --read-key --verbose -DCLParam=%%test --from-file tests/test-raw.txt param1@ 2>>tests/$FIFILE
