@@ -1,6 +1,6 @@
 # awsFillAndSign
 Fill a CURL config file template with AWS  signature version 4. Cross-platform CLI utility and library in C.
-<br>awsFillAndSign Copyright 2016 MIB SOFTWARE, INC.
+<br>awsFillAndSign Copyright 2016-2017 MIB SOFTWARE, INC.
 
  PURPOSE:   Sign Amazon Web Services requests with AWS Signature Version 4.
 
@@ -15,7 +15,7 @@ Fill a CURL config file template with AWS  signature version 4. Cross-platform C
             http://www.mibsoftware.com/
 
 ```
-awsFillAndSign Copyright 2016 MIB SOFTWARE, INC.
+awsFillAndSign Copyright 2016-2017 MIB SOFTWARE, INC.
 
  USAGE: awsFillAndSign [OPTIONS] <template-name.curl> [param1[ param2...]]
 
@@ -43,6 +43,9 @@ awsFillAndSign Copyright 2016 MIB SOFTWARE, INC.
 
   -D <name=value>  Put name=value into the environment.
 
+  --encode <flag>  Control percent-encoding. 0 - (default) auto-detect;
+                   1 - always percent-encode; -1 - never percent-encode.
+                   
   -                Marker for end of arguments. (Useful when parameters that
                    follow may start with '-'.)
 
@@ -75,7 +78,7 @@ If you run awsFillAndSign --list aws-s3-put.curl you will see an example: the bu
 @//
 @//.default.AWS_SERVICE_NAME=s3
 url="https://@1_bucket@.s3.amazonaws.com/@3_objectname@"
-upload-file = "@2_filename@"
+upload-file = "@p2_filename@"
 header = "Host: @1_bucket@.s3.amazonaws.com"
 header = "Authorization: AWS4-HMAC-SHA256 Credential=...,SignedHeaders=...,Signature=... (all will be replaced)"
 header = "x-amz-content-sha256:will be replaced"
@@ -89,9 +92,7 @@ When you are authoring templates, awsFillAndSign supports the following kinds of
 
 If the AWS_SERVICE_NAME is not given by the template, it must be in the environment.
 
-Some parts of the request will need to be URI-encoded, for example the parts of query strings. If the command line parameters you give to awsFillAndSign are not URI encoded already, the template must specify where it is necessary:
-* URI-Encoded Numeric: These are like Numeric parameters with a 'u' prefix, as in '@u3_objectname@'
-* URI-Encoded environment variable: These parameters are in the template with a 'eu' prefix, as in '@euENV_VARIABLEVARIABLE@'.
+Some parts of the request will be URL-encoded, controlled by the --encode option. By default, this is auto-detected for each parameter. If a parameter value has a percent character (%) followed by two hexadecimal ascii digits, it is considered already encoded. The template can start with @p<numeric> or @pe to never encode (which is appropriate for CURL upload-file, for example.)
 
 ## When there is a request body
-When there is an upload-file, as there is for AWS S3 PUT, awsFillAndSign reads the file to compute the SHA256 that is required for the request. If there is a data= field, that will be used to compute the body.
+When there is an upload-file, as there is for AWS S3 PUT, awsFillAndSign reads the file to compute the SHA256 that is required for the request. If there is a data= field, that will be used to compute the body. You can also use -b, or supply the SHA256 in the template and give the --have-sha256 option.
