@@ -191,7 +191,23 @@ int librock_coverage_main()
             , write_to_FILE, stderr
             );
         fprintf(stderr,"I-195 %s\n", pString ? pString : "");
-
+        pSigningParameters[0] = "test0";
+        pString = librock_awsFillAndSign(
+            "request"
+            ,pSigningParameters
+            , write_to_FILE, stdout
+            , write_to_FILE, stderr
+            );
+        fprintf(stderr,"I-196 %s\n", pString ? pString : "");
+        pSigningParameters[0] = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        pString = librock_awsFillAndSign(
+            "request"
+            ,pSigningParameters
+            , write_to_FILE, stdout
+            , write_to_FILE, stderr
+            );
+        fprintf(stderr,"I-210 %s\n", pString ? pString : "");
+ 
     }
     fprintf(stderr,"I-2404 %d\n", countToValue("Up to newline\n"));
     {

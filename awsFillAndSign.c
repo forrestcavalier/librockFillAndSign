@@ -503,7 +503,7 @@ PRIVATE const char *librock_awsSignature_parseRequest_(struct librock_awsRequest
                 /* Do not sign */
             } else if (!strncasecmp(pRead, "x-amz-content-sha256:", 21)) {
                 /* Do not sign */
-                if (pRequest->ppSigningParameters[iSHA256] == (char *) 1) {
+                if (pRequest->ppSigningParameters[iSHA256] == (char *) 0) {
                     pRead += 21;
                     while(*pRead == ' ') {
                         pRead++;
@@ -546,6 +546,20 @@ skip_line:
             }
         }
         iPass++;
+    }
+    {
+        int cValid = 0;
+        const char *pRead = pRequest->ppSigningParameters[iSHA256];
+        if (pRead == 0) {
+            return "E-551 x-amz-content-sha256 not set ";
+        }
+        while(*pRead && strchr("0123456789ABCDEFabcdef",*pRead)) {
+            pRead++;
+            cValid++;
+        }
+        if (cValid != 64) {
+            return "E-561 x-amz-content-sha256 must be 64 hexadecimal ascii digits";
+        }
     }
     { // If URI is absolute, skip host part
         int iHost;
@@ -1909,7 +1923,7 @@ int main(int argc, char **argv)
         }
         if (scanSignature==0) {
             /* Get from template */
-            signingParameters[iSHA256] = (char *) 1;
+            signingParameters[iSHA256] = (char *) 0;
         } else if (scanSignature==1) {
             /* Find an upload-file or data= field in the request. */
             const char *pRead = pFilledRequest;
