@@ -20,6 +20,7 @@ export AWS_SECURITY_TOKEN=test_example_security_token
 
 ./awsFillAndSign -Dtest=19 --list 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=19b --list aws-s3-get.curl 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=19c --list aws-s3-get.curl extra 2>>tests/$FIFILE
 
 ./awsFillAndSign -Dtest=21 --list aws-ec2-describe-instances.curl >tests/awsFillAndSignTest.txt 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=22 -b tests/awsFillAndSignTest.txt --from-file tests/awsFillAndSignTest.txt 2>>tests/$FIFILE

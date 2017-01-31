@@ -151,7 +151,9 @@ Windows, and GCC on Linux and *BSD:
 #include <sys/types.h>
 #include <time.h>
 #include <string.h>
+
 #if defined LIBROCK_WANT_INCLUDE_PTHREAD
+//gmtime_r is a compatibility macro in pthread.h
 #   include <pthread.h>
 #endif
 #if defined(LIBROCK_AWSFILLANDSIGN_MAIN)
@@ -171,9 +173,13 @@ void *librock_FaultInjection_malloc(size_t);
 void *librock_FaultInjection_realloc(void *p, size_t);
 #define malloc librock_FaultInjection_malloc
 #define realloc librock_FaultInjection_realloc
+
+time_t librock_coverage_time( time_t *arg ); //Always return 0
+#define time librock_coverage_time
 #else
 #define GLOBAL_ALTERNATE_BRANCH 0
 #endif
+static void freeOnce(void **);
 
 #include "librock_postinclude.h"
 
@@ -285,7 +291,6 @@ void *librock_FaultInjection_realloc(void *p, size_t);
                         const char *pSource,
                         int cSource);
     
-    PRIVATE void freeOnce(void **pp); /* free() a pointer and then set it NULL */
 #ifdef LIBROCK_AWSFILLANDSIGN_MAIN
     PRIVATE const char *librock_fileSha256Contents(const char *fname, unsigned char *mdBuffer32); /* store 32 bytes, returns error explanation or 0 */
     PRIVATE void *librock_fileGetContents(const char *fname); /* allocate memory, read entire file */
@@ -467,7 +472,6 @@ PRIVATE const char *librock_awsSignature_parseRequest_(struct librock_awsRequest
         pRead = pStartParse;
         pRequest->cHeaders = 0;
         while (*pRead) {
-
             if (pRequest->bFormatCURL) {
                 if (isCurlOptionName(pRead, "upload-file")) {
                     if (iPass == 0) {
@@ -1062,11 +1066,13 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
         if (!pHashInfo) {
             freeOnce((void **) & pRequest->pSignedHeaders);
             freeOnce((void **) & aParameter.p);
+            freeOnce((void **) & pCanonicalRequest);
             return "E-1059 malloc failed";
         }
         librock_sha256Init(pHashInfo);
         librock_sha256Update(pHashInfo, (unsigned char *) pCanonicalRequest, strlen(pCanonicalRequest));
         librock_sha256StoreFinal(mdCanonicalRequest, pHashInfo);
+
         freeOnce((void **)&pHashInfo);
 
         /* mdCanonicalRequest has the SHA256 of the canonical request */
@@ -1074,6 +1080,7 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
         if (pRequest->fnDebugOutput) {
             librock_awsSignature_dump2_(pRequest, "CanonicalRequest", pCanonicalRequest);
         }
+        freeOnce((void **) & pCanonicalRequest);
         
     }
     {
@@ -1177,7 +1184,6 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
         memmove(pConcatKey, "AWS4", 4);
         memmove(pConcatKey+4, pRequest->ppSigningParameters[iSECRET_ACCESS_KEY], cbBuf-4);
         pConcatKey[cbBuf] = '\0';
-
         librock_hmacSha256(resultSha,
                             pConcatKey,
                             cbBuf,
@@ -1425,6 +1431,7 @@ int librock_stringListGetIndex(char ***ppNamedArguments,int cStep, const char *p
     if (iString == -1 || iString % expansion == expansion-cStep) {
         /* Need to expand */
         char **ppExpanded;
+
         ppExpanded = realloc((void *)*ppNamedArguments, sizeof(char *) * (iString+1+expansion));
         if (!ppExpanded) {
             return -1;
@@ -1438,8 +1445,8 @@ int librock_stringListGetIndex(char ***ppNamedArguments,int cStep, const char *p
     return iString;
 } /* librock_stringListGetIndex */
 
-PRIVATE const char *putenvNamedDefaults(char ***ppNamedArguments, const char *pRequestTemplate)
-{ /* Scan a template for @//.default. entries and call putenv() */
+PRIVATE const char *collectNamedDefaults(char ***ppNamedArguments, const char *pRequestTemplate)
+{ /* Scan a template for @//.default. entries */
 const char *pRead = pRequestTemplate;
 int cRequestTemplate = strlen(pRequestTemplate);
 while(*pRead) {
@@ -1452,7 +1459,7 @@ while(*pRead) {
             cToken -= 12;
             cName = countToStr(pRead, "=");
             
-            if (cName > cToken) {
+            if (cName >= cToken) {
                 /* Ignore */
             } else {
                 int iString = librock_stringListGetIndex(ppNamedArguments, 2, pRead, cName);
@@ -1475,7 +1482,7 @@ while(*pRead) {
                         if (!pValue) {
                             return "E-1522 malloc failed";
                         }
-                        memmove(pValue, pRead+cName+1, cToken-cName);
+                        memmove(pValue, pRead+cName+1, cToken-cName-1);
                         pValue[cToken-cName-1] = '\0';
                         pValue[countToEol(pValue)] = '\0';
                     }
@@ -1521,28 +1528,324 @@ while(*pRead) {
         
     }
     pRead += cToken;
-    
+
 }
 
 return 0;
-} /* putenvNamedDefaults */
+} /* collectNamedDefaults */
+PRIVATE const char *collectNamedParameters(char ***pppNamedArguments, const char *pRequestTemplate)
+{
+        const char *pMessage = 0;
+        pMessage = collectNamedDefaults(pppNamedArguments, 
+                    "@//.default.QueryExtra=");
+        if (pMessage) {
+            return pMessage;
+        }
 
+        pMessage = collectNamedDefaults(pppNamedArguments, 
+                    "@eAWS_DEFAULT_REGION@"
+                    ",@eAWS_SERVICE_NAME@"
+                    ",@eAWS_SECURITY_TOKEN@"
+                    ",@eQueryExtra@");
+        if (pMessage) {
+            return pMessage;
+        }
+        pMessage = collectNamedDefaults(pppNamedArguments, pRequestTemplate);
+        if (pMessage) {
+            return pMessage;
+        }
+        if (!*pppNamedArguments) {
+            pMessage = "E-1879 Must set AWS_DEFAULT_REGION and AWS_SERVICE_NAME";
+        }
+        return pMessage;
+
+} /* collectNamedParameters */
+
+const char *mallocNamedTemplate(char **ppRequestTemplate,int fromFile,const char *pName)
+{
+    char *pWrite = 0;
+    char *pRead;
+    if (fromFile) {
+        *ppRequestTemplate = (char *) librock_fileGetContents(pName);
+        if (!*ppRequestTemplate) {
+            return "E-1096 did not load file";
+        }
+    } else {   /* Make a copy of built-in template */
+        char *pBuiltIn = (char *) librock_awsBuiltInTemplate(pName);
+        int size;
+        if (!pBuiltIn) {
+            return "I-1515 no built-in template";
+        }
+        size = strlen(pBuiltIn);
+        *ppRequestTemplate = malloc(size);
+        if (!*ppRequestTemplate) {
+            return "I-1515 malloc failed";
+        }
+        memmove(*ppRequestTemplate, pBuiltIn, size+1);
+    }
+    /* Strip \r in place */
+    pWrite = *ppRequestTemplate;
+    pRead = pWrite;
+    *ppRequestTemplate = pWrite;
+    while (*pRead) {
+        while (*pRead == '\r') {
+            pRead++;
+        }
+        *pWrite++ = *pRead++;
+    }
+    *pWrite = '\0';
+    return 0;
+
+} /* mallocNamedTemplate */
+
+const char *prepareSHA256(char **ppSHA256,int scanType, unsigned char *mdContent32, const char *pFilledRequest)
+{
+    if (scanType == 1) { /* process CURL options to determine body */
+        /* Find an upload-file or data= field in the request. */
+        const char *pRead = pFilledRequest;
+        while(pRead) {
+            if (isCurlOptionName(pRead, "upload-file")) {
+                char *fileName = 0;
+                const char *pErrorMessage;
+                int nameLength;
+                pRead += countToValue(pRead);
+                nameLength = countToStr(pRead, "\x22");
+                fileName = malloc(nameLength+1);
+                if (!fileName) {
+                    return "E-1741 malloc failed";
+                }
+                memmove(fileName, pRead, nameLength );
+                fileName[nameLength] = '\0';
+
+                pErrorMessage = librock_fileSha256Contents(fileName, &mdContent32[0]);
+                if (pErrorMessage) {
+                    return pErrorMessage;
+                }
+                
+                freeOnce((void **)&fileName);
+                break;
+            } else if (isCurlOptionName(pRead, "data") ||
+                       isCurlOptionName(pRead, "data-binary")
+                    ) {
+                void *pHashInfo;
+                int iStart = 0;
+                int iParse = 0;
+                pRead += countToValue(pRead);
+                /* Compute hash */
+                pHashInfo = malloc(librock_sha256Init(0)/*Get size */);
+                if (!pHashInfo) {
+                    return "E-1744 malloc failed";
+                }
+                librock_sha256Init(pHashInfo);
+                while(pRead[iParse] && pRead[iParse] != '\n' && pRead[iParse]!= '\x22') {
+                    if (pRead[iParse] == '\\') {
+                        //These are the escapes that CURL recognizes */
+                        librock_sha256Update(pHashInfo, 
+                           (unsigned char *) pRead+iStart, iParse-iStart);
+                        if (pRead[iParse+1]=='t') {
+                            librock_sha256Update(pHashInfo, 
+                               (const unsigned char *) "\t", 1);
+                        } else if (pRead[iParse+1]=='r') {
+                            librock_sha256Update(pHashInfo, 
+                               (const unsigned char *) "\r", 1);
+                        } else if (pRead[iParse+1]=='n') {
+                            librock_sha256Update(pHashInfo, 
+                               (const unsigned char *) "\n", 1);
+                        } else if (pRead[iParse+1]=='v') {
+                            librock_sha256Update(pHashInfo, 
+                               (const unsigned char *) "\v", 1);
+                        } else {
+                            /* Just itself */
+                            librock_sha256Update(pHashInfo, 
+                               (unsigned char *) pRead+iParse+1, 1);
+                        }
+                        iParse = iParse+2;
+                        iStart = iParse;
+                    } else {
+                        iParse++;
+                    }
+                }
+                librock_sha256Update(pHashInfo, 
+                   (unsigned char *) pRead+iStart, iParse-iStart);
+                librock_sha256StoreFinal(mdContent32, pHashInfo);
+                freeOnce((void **)&pHashInfo);
+                break;
+            }
+            pRead = strchr(pRead, '\n');
+            if (pRead) {
+                pRead++;
+            }
+            
+        }
+        if (!pRead) {
+            // Presume empty body is OK.
+        }
+    }
+    {
+        int i;
+        *ppSHA256 = malloc(64+1);
+        if (!*ppSHA256) {
+            return "E-1744 malloc failed";
+        }
+        for (i = 0; i < 32; i++) {
+            bToHex0(*ppSHA256 + i*2, mdContent32[i] & 0xff);
+        }
+        (*ppSHA256)[32*2] = '\0';
+    }
+    return 0; // No error
+} /* prepareSHA256 */
+
+int main_help()
+{
+fprintf(stdout, "%s",
+    "awsFillAndSign Copyright 2016 MIB SOFTWARE, INC."
+    "\n"
+    "\n"" PURPOSE:   Sign Amazon Web Services requests with AWS Signature Version 4."
+    "\n"
+    "\n"" LICENSE:   MIT (Free/OpenSource)"
+    "\n" 
+    "\n"" STABILITY: UNSTABLE as of 2017-01-17"
+    "\n""            Check for updates at: https://github.com/forrestcavalier/awsFillAndSign"
+    "\n"              
+    "\n"" SUPPORT:   Contact the author for commercial support and consulting at"
+    "\n""            http://www.mibsoftware.com/"
+    "\n"
+    "\n"
+    "\n"" USAGE: awsFillAndSign [OPTIONS] <template-name.curl> [param1[ param2...]]"
+    "\n"
+    "\n""   The output is the filled template with AWS Version 4 signatures."
+    "\n""   Credentials come from the environment variables AWS_ACCESS_KEY_ID"
+    "\n""   and AWS_SECRET_ACCESS_KEY (unless using the --read-key option.)"
+    "\n""   AWS_SECURITY_TOKEN is included if it is defined."
+    "\n"
+    "\n"
+    "\n"" OPTIONS:"
+    "\n""  --from-file      Treat the template-name as a file, not a built-in template."
+    "\n""                   (Use --list to see built-in templates.)"
+    "\n"
+    "\n""  --have-sha256    The template has a SHA256 body signature."
+    "\n"
+    "\n""  -b <file-name>   Calculate SHA256 body signature from specified file."
+    "\n""                   (Only needed if the template does not give accurate"
+    "\n""                   upload-file or data CURL options.)"
+    "\n"
+    "\n""  --read-key       Read credentials from one line on stdin in the format of:"
+    "\n""                      <ID>,<SECRET>"
+    "\n"
+    "\n""  --verbose        Verbose debugging output on stderr, including generated"
+    "\n""                   AWS Canonical Request fields."
+    "\n"
+    "\n""  -D <name=value>  Put name=value into the environment."
+    "\n"
+    "\n""  --encode <flag>  Control percent-encoding. 0 - (default) auto-detect;"
+    "\n""                   1 - always percent-encode; -1 - never percent-encode."
+    "\n"
+    "\n""  -                Marker for end of arguments. (Useful when parameters that"
+    "\n""                   follow may start with '-'.)"
+    "\n"
+    "\n"" INFORMATION commands (output is not a filled and signed template:)"
+    "\n""  --help           Show this message."
+    "\n""  --list           List the built-in templates."
+    "\n""  --list <name>    Show the named built-in template along with comments."
+    "\n"
+    );
+return 0;    
+}
+int main_list(int argc, char **argv)
+{
+    int i;
+    int argumentIndex = 0;
+    i = 1;
+    if (argumentIndex == argc-1) {
+        while(librock_awsBuiltInTemplates[i]) {
+            fprintf(stdout, "%.*s\n", countToStr(librock_awsBuiltInTemplates[i]+3,";"), librock_awsBuiltInTemplates[i]+3);
+            i++;
+        }
+    } else {
+        const char *pNext;
+        const char *pFields;
+        int cField = 0;
+        const char *pRequestTemplate = (char *) librock_awsBuiltInTemplate(argv[argumentIndex+1]);
+        if (!pRequestTemplate) {
+            fprintf(stderr, "I-1515 no built-in template '%s'\n", argv[argumentIndex+1]);
+            return 9;
+        }
+        fprintf(stdout, "@//%s\n", argv[argumentIndex+1]);
+
+        // Templates are stored in a compact format. Expand it
+        pFields = pRequestTemplate + countToStr(pRequestTemplate,";")+1;
+        pRequestTemplate += countToStr(pRequestTemplate, "\n")+1;
+        pNext = strstr(pRequestTemplate,"REST API DOCS");
+        if (!pNext) {
+            pNext = strstr(pRequestTemplate,"TEMPLATE FOR:");
+        }
+        if (!pNext) {
+            pNext = pRequestTemplate;
+        }
+        
+        pNext += countToEol(pNext) + 1;
+        fprintf(stdout, "%.*s", pNext - pRequestTemplate,pRequestTemplate);
+        fprintf(stdout, "@//");
+        fprintf(stdout, "\n@// TEMPLATE REVISION:    ");
+        cField = countToStr(pFields,";");
+        if (pFields + cField < pRequestTemplate) {
+            fprintf(stdout,"%.*s", cField ,pFields);
+        } else {
+            cField = pRequestTemplate - pFields - 1;
+        }
+        pFields += cField + 1;
+        cField = countToStr(pFields,";");
+        if (pFields + cField < pRequestTemplate) {
+            fprintf(stdout," by %.*s", cField ,pFields);
+        } else {
+            cField = pRequestTemplate - pFields - 1;
+        }
+        pFields += cField + 1;
+        fprintf(stdout, "\n@// TEMPLATE LICENSE:     ");
+        cField = pRequestTemplate-pFields-1;
+        if (cField > 0) {
+            fprintf(stdout,"%.*s", cField ,pFields);
+        }
+        if (countToStr(pNext,"  @1") < countToStr(pNext,"\n")) {
+            fprintf(stdout, "\n@// TEMPLATE PARAMETERS:");
+        }
+        pRequestTemplate = pNext-1;
+        pNext = strstr(pRequestTemplate,"\n@//.default.");
+        if (!pNext) {
+            pNext = pRequestTemplate + strlen(pRequestTemplate);
+        }
+        fprintf(stdout,"%.*s", pNext-pRequestTemplate, pRequestTemplate);
+        fprintf(stdout,"%s",
+            "\n""@//"
+            "\n""@// (Before using CURL, use awsFillAndSign by MIB SOFTWARE to fill the"
+            "\n""@// template, strip comments, and add headers for AWS Signature version 4.)"
+            "\n""@//"
+            );
+        fprintf(stdout,"%s", pNext);
+        pRequestTemplate = 0; /* Was not allocated */
+        return 0;
+    }
+    return 0;
+
+}
 int main(int argc, char **argv)
 {
     //char *credentialregion = 0;
     int argumentIndex;
     int bVerbose = 0;
-    int scanSignature = 1; /* Look for data and upload-file */
+    int scanSignature = 1; /* By default, look for data and upload-file */
     int fromFile = 0;
     int iEncodeParameters = 0;
     int credentialsFromEnv = 1;
+    char credentials[200];
     char *signingParameters[6];
     unsigned char mdContent32[] = { /* SHA256 of empty string */
         0xe3,0xb0,0xc4,0x42,0x98,0xfc,0x1c,0x14,0x9a,0xfb,0xf4,0xc8,0x99,0x6f,0xb9,0x24,0x27,0xae,0x41,0xe4,0x64,0x9b,0x93,0x4c,0xa4,0x95,0x99,0x1b,0x78,0x52,0xb8,0x55
     };
-    const char *pRequestTemplate = 0;
+    char *pRequestTemplate = 0;
     char **ppNamedArguments = 0;
-
+    char *pFilledRequest = 0;
+    int errorCode = 0;
 
 #if defined librock_WANT_ALTERNATE_BRANCHING
     argumentIndex = 1;
@@ -1554,7 +1857,6 @@ int main(int argc, char **argv)
     fprintf(stderr,"\n");
 #endif
     librock_triggerAlternateBranch(0, 0); /* Initialize branch alteration mechanism */
-    
     /* Accept command line flags preceding the template file name*/
     argumentIndex = 1;
     if (argc > argumentIndex) {
@@ -1567,133 +1869,15 @@ int main(int argc, char **argv)
             }
             if (!strcmp(argv[argumentIndex], "--verbose")) {
                 bVerbose = 1;
-            } else if (!strcmp(argv[argumentIndex], "--help")) {    
-                    fprintf(stdout, "%s",
-    "awsFillAndSign Copyright 2016 MIB SOFTWARE, INC."
-"\n"
-"\n"" PURPOSE:   Sign Amazon Web Services requests with AWS Signature Version 4."
-"\n"
-"\n"" LICENSE:   MIT (Free/OpenSource)"
-"\n" 
-"\n"" STABILITY: UNSTABLE as of 2017-01-17"
-"\n""            Check for updates at: https://github.com/forrestcavalier/awsFillAndSign"
-"\n"              
-"\n"" SUPPORT:   Contact the author for commercial support and consulting at"
-"\n""            http://www.mibsoftware.com/"
-"\n"
-"\n"
-"\n"" USAGE: awsFillAndSign [OPTIONS] <template-name.curl> [param1[ param2...]]"
-"\n"
-"\n""   The output is the filled template with AWS Version 4 signatures."
-"\n""   Credentials come from the environment variables AWS_ACCESS_KEY_ID"
-"\n""   and AWS_SECRET_ACCESS_KEY (unless using the --read-key option.)"
-"\n""   AWS_SECURITY_TOKEN is included if it is defined."
-"\n"
-"\n"
-"\n"" OPTIONS:"
-"\n""  --from-file      Treat the template-name as a file, not a built-in template."
-"\n""                   (Use --list to see built-in templates.)"
-"\n"
-"\n""  --have-sha256    The template has a SHA256 body signature."
-"\n"
-"\n""  -b <file-name>   Calculate SHA256 body signature from specified file."
-"\n""                   (Only needed if the template does not give accurate"
-"\n""                   upload-file or data CURL options.)"
-"\n"
-"\n""  --read-key       Read credentials from one line on stdin in the format of:"
-"\n""                      <ID>,<SECRET>"
-"\n"
-"\n""  --verbose        Verbose debugging output on stderr, including generated"
-"\n""                   AWS Canonical Request fields."
-"\n"
-"\n""  -D <name=value>  Put name=value into the environment."
-"\n"
-"\n""  --encode <flag>  Control percent-encoding. 0 - (default) auto-detect;"
-"\n""                   1 - always percent-encode; -1 - never percent-encode."
-"\n"
-"\n""  -                Marker for end of arguments. (Useful when parameters that"
-"\n""                   follow may start with '-'.)"
-"\n"
-"\n"" INFORMATION commands (output is not a filled and signed template:)"
-"\n""  --help           Show this message."
-"\n""  --list           List the built-in templates."
-"\n""  --list <name>    Show the named built-in template along with comments."
-);
-
-                return 0;
+            } else if (!strcmp(argv[argumentIndex], "--help")) {
+                return main_help();
             } else if (!strcmp(argv[argumentIndex], "--list")) {    
-                int i;
-                i = 1;
-                if (argumentIndex == argc-1) {
-                    while(librock_awsBuiltInTemplates[i]) {
-                        fprintf(stdout, "%.*s\n", countToStr(librock_awsBuiltInTemplates[i]+3,";"), librock_awsBuiltInTemplates[i]+3);
-                        i++;
-                    }
+                if (argumentIndex + 2 < argc) {
+                    /* Error */
+                    argumentIndex = argc;
                 } else {
-                    const char *pNext;
-                    const char *pFields;
-                    int cField = 0;
-                    pRequestTemplate = (char *) librock_awsBuiltInTemplate(argv[argumentIndex+1]);
-                    if (!pRequestTemplate) {
-                        fprintf(stderr, "I-1515 no built-in template '%s'\n", argv[argumentIndex+1]);
-                        return 9;
-                    }
-                    fprintf(stdout, "@//%s\n", argv[argumentIndex+1]);
-
-                    pFields = pRequestTemplate + countToStr(pRequestTemplate,";")+1;
-                    pRequestTemplate += countToStr(pRequestTemplate, "\n")+1;
-                    /* Expand */
-                    pNext = strstr(pRequestTemplate,"REST API DOCS");
-                    if (!pNext) {
-                        pNext = strstr(pRequestTemplate,"TEMPLATE FOR:");
-                    }
-                    if (!pNext) {
-                        pNext = pRequestTemplate;
-                    }
-                    
-                    pNext += countToEol(pNext) + 1;
-                    fprintf(stdout, "%.*s", pNext - pRequestTemplate,pRequestTemplate);
-                    fprintf(stdout, "@//");
-                    fprintf(stdout, "\n@// TEMPLATE REVISION:    ");
-                    cField = countToStr(pFields,";");
-                    if (pFields + cField < pRequestTemplate) {
-                        fprintf(stdout,"%.*s", cField ,pFields);
-                    } else {
-                        cField = pRequestTemplate - pFields - 1;
-                    }
-                    pFields += cField + 1;
-                    cField = countToStr(pFields,";");
-                    if (pFields + cField < pRequestTemplate) {
-                        fprintf(stdout," by %.*s", cField ,pFields);
-                    } else {
-                        cField = pRequestTemplate - pFields - 1;
-                    }
-                    pFields += cField + 1;
-                    fprintf(stdout, "\n@// TEMPLATE LICENSE:     ");
-                    cField = pRequestTemplate-pFields-1;
-                    if (cField > 0) {
-                        fprintf(stdout,"%.*s", cField ,pFields);
-                    }
-                    if (countToStr(pNext,"  @1") < countToStr(pNext,"\n")) {
-                        fprintf(stdout, "\n@// TEMPLATE PARAMETERS:");
-                    }
-                    pRequestTemplate = pNext-1;
-                    pNext = strstr(pRequestTemplate,"\n@//.default.");
-                    if (!pNext) {
-                        pNext = pRequestTemplate + strlen(pRequestTemplate);
-                    }
-                    fprintf(stdout,"%.*s", pNext-pRequestTemplate, pRequestTemplate);
-                    fprintf(stdout,"%s",
-    "\n""@//"
-	"\n""@// (Before using CURL, use awsFillAndSign by MIB SOFTWARE to fill the"
-    "\n""@// template, strip comments, and add headers for AWS Signature version 4.)"
-    "\n""@//"
-    );
-                    fprintf(stdout,"%s", pNext);
-
-                    return 0;
+                    return main_list(argc-argumentIndex,argv+argumentIndex);
                 }
-                return 0;
             } else if (!strcmp(argv[argumentIndex], "--from-file")) {
                 /* Load template from file */
                 fromFile = 1;
@@ -1763,146 +1947,104 @@ int main(int argc, char **argv)
         return -1;
     }
     
-    /* Get template */
-    if (fromFile) {
-        char *pWrite = 0;
-        pWrite = (char *) librock_fileGetContents(argv[argumentIndex]);
-        if (!pWrite) {
-            perror("E-1096 load template");
-            fprintf(stderr, "I-1701 loading template file '%s'\n", argv[argumentIndex]);
-            return 1;
-        }
-        
-        /* Strip \r in place */
-        char *pRead = pWrite;
-        pRequestTemplate = pWrite;
-        while (*pRead) {
-            while (*pRead == '\r') {
-                pRead++;
-            }
-            *pWrite++ = *pRead++;
-        }
-        *pWrite = '\0';
-        if (bVerbose) {
-            fprintf(stderr, "I-1703 loaded template file '%s'\n", argv[argumentIndex]);
-        }
-    } else {   /* Use built-in template */
-        pRequestTemplate = (char *) librock_awsBuiltInTemplate(argv[argumentIndex]);
-        if (!pRequestTemplate) {
-            fprintf(stderr, "I-1515 no built-in template '%s'\n", argv[argumentIndex]);
-            return 9;
-        }
-        if (bVerbose) {
-            fprintf(stderr, "I-1710 loaded built-in template '%s'\n", argv[argumentIndex]);
-        }
-    }
-
-    {
-        const char *pMessage = 0;
-        const char *pName;
-        pMessage = putenvNamedDefaults(&ppNamedArguments, 
-                    "@//.default.QueryExtra=");
-        if (pMessage) {
-            fprintf(stderr, "%s\n", pMessage);
-            return 14;
-        }
-
-        pMessage = putenvNamedDefaults(&ppNamedArguments, 
-                    "@eAWS_DEFAULT_REGION@"
-                    ",@eAWS_SERVICE_NAME@"
-                    ",@eAWS_SECURITY_TOKEN@"
-                    ",@eQueryExtra@");
-        if (pMessage) {
-            fprintf(stderr, "%s\n", pMessage);
-            return 14;
-        }
-
-        pMessage = putenvNamedDefaults(&ppNamedArguments, pRequestTemplate);
-        if (pMessage) {
-            fprintf(stderr, "%s\n", pMessage);
-            return 14;
-        }
-        if (!ppNamedArguments) {
-            fprintf(stderr,"E-1879 Must set AWS_DEFAULT_REGION and AWS_SERVICE_NAME\n");
-            return 14;
-        }
-
-        signingParameters[iSHA256] = 0; //Set below
-        pName = "AWS_DEFAULT_REGION";
-        signingParameters[iSERVICE_REGION] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
-        pName = "AWS_SERVICE_NAME";
-        signingParameters[iSERVICE_NAME] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
-        pName = "AWS_SECURITY_TOKEN";
-        signingParameters[iSECURITY_TOKEN] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
-    }
     
-    /* Format @eAWS_DEFAULT_REGION@/@eAWS_SERVICE_NAME@,@eAWS_ACCESS_KEY_ID@,@eAWS_SECRET_ACCESS_KEY@ into credentials buffer */
-    {
-        const char *pMessage = 0;
-        if (credentialsFromEnv) {
-            const char *pName;
-            pMessage = putenvNamedDefaults(&ppNamedArguments, 
-                    "@eAWS_ACCESS_KEY_ID@,@eAWS_SECRET_ACCESS_KEY@");
-            if (!pMessage) {
-                pName = "AWS_ACCESS_KEY_ID";
-                signingParameters[iACCESS_KEY_ID] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
-                pName = "AWS_SECRET_ACCESS_KEY";
-                signingParameters[iSECRET_ACCESS_KEY] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
-            }
-        }
-
+    { /* Get template */
+        const char *pName = argv[argumentIndex];
+        const char *pMessage = mallocNamedTemplate(&pRequestTemplate,fromFile,pName);
         if (pMessage) {
-            fprintf(stderr, "%s\n", pMessage);
+            if (fromFile) {
+                perror(pMessage);
+                fprintf(stderr, " when loading template file '%s'\n", pName);
+            } else {
+                fprintf(stderr, "%s when loading built-in template '%s'\n", pMessage, pName);
+            }
             return 14;
         }
-        if (!credentialsFromEnv) {
-            char credentials[200];
-            credentials[198] = '\0';
-
-            /* Get comma-separated credentials on stdin, which must have this form. Lengths may vary.
-                  AXXXXXXXXXXXXXXXXXXX,7777777777777777777777777777777777777777
-             There must be no quote characters or spaces.
-             Line length more than 198 characters will block processing.
-             */
-            const char *pCredentials;
-            if (bVerbose) {
-                fprintf(stderr, "I-1737 reading credentials on stdin\n");
+        if (bVerbose) {
+            if (fromFile) {
+                fprintf(stderr, "I-1703 loaded template file '%s'\n", pName);
+            } else {
+                fprintf(stderr, "I-1710 loaded built-in template '%s'\n", pName);
             }
-
-            pCredentials = fgets(credentials,sizeof(credentials)-1, stdin);
-            
-            if (GLOBAL_ALTERNATE_BRANCH) {
-                pCredentials = 0;
-            }
-            if (!pCredentials) {
-                perror("E-1163 Could not read credentials string");
-                return 5;
-            }
-            if (strlen(credentials) >= sizeof(credentials) - 2) {
-                fprintf(stderr, "E-1167 The credentials string on stdin is too long\n");
-                return 6;
-            }
-            if (!strchr(credentials,',')) {
-                fprintf(stderr, "E-1956 Need comma-separated credentials on stdin\n");
-                return 16;
-            }
-            credentials[countToEol(credentials)] = '\0'; /* Remove \r or EOL */
-            *(strchr(credentials, ',')) = '\0'; /* Split string */
-
-            signingParameters[iACCESS_KEY_ID] = credentials;
-            signingParameters[iSECRET_ACCESS_KEY] = credentials+strlen(credentials)+1;
-            
         }
-        
     }
-    //Output nothing on error. Don't want to send a request that will be rejected.
-
     argumentIndex++; /* Advance to template parameters */
 
-    {
-        char *pFilledRequest = 0;
+    { /* Determine Signing Parameters */
+        const char *pName;
+        const char * pMessage = collectNamedParameters(&ppNamedArguments,pRequestTemplate);
+
+        if (pMessage) {
+            fprintf(stderr, "%s\n", pMessage);
+            freeOnce((void **)&pRequestTemplate);
+            errorCode = 14;
+        } else {
+
+            signingParameters[iSHA256] = 0; //Set below
+            pName = "AWS_DEFAULT_REGION";
+            signingParameters[iSERVICE_REGION] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+            pName = "AWS_SERVICE_NAME";
+            signingParameters[iSERVICE_NAME] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+            pName = "AWS_SECURITY_TOKEN";
+            signingParameters[iSECURITY_TOKEN] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+            
+            if (credentialsFromEnv) {
+                const char *pName;
+                pMessage = collectNamedDefaults(&ppNamedArguments, 
+                        "@eAWS_ACCESS_KEY_ID@,@eAWS_SECRET_ACCESS_KEY@");
+                if (!pMessage) {
+                    pName = "AWS_ACCESS_KEY_ID";
+                    signingParameters[iACCESS_KEY_ID] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+                    pName = "AWS_SECRET_ACCESS_KEY";
+                    signingParameters[iSECRET_ACCESS_KEY] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+                } else {
+                    fprintf(stderr, "%s\n", pMessage);
+                    errorCode = 14;
+                }
+            } else {
+                const char *pCredentials;
+                credentials[sizeof(credentials)-2] = '\0';
+
+                /* Get comma-separated credentials on stdin, which must have this form. Lengths may vary.
+                      AXXXXXXXXXXXXXXXXXXX,7777777777777777777777777777777777777777
+                 There must be no quote characters or spaces.
+                 Line length more than 198 characters will block processing.
+                 */
+                if (bVerbose) {
+                    fprintf(stderr, "I-1737 reading credentials on stdin\n");
+                }
+
+                pCredentials = fgets(credentials,sizeof(credentials)-1, stdin);
+                
+                if (GLOBAL_ALTERNATE_BRANCH) {
+                    pCredentials = 0;
+                }
+                if (!pCredentials) {
+                    perror("E-1163 Could not read credentials string");
+                    errorCode = 5;
+                } else if (strlen(credentials) >= sizeof(credentials) - 2) {
+                    fprintf(stderr, "E-1167 The credentials string on stdin is too long\n");
+                    freeOnce((void **)&pRequestTemplate);
+                    errorCode = 6;
+                } else if (!strchr(credentials,',')) {
+                    fprintf(stderr, "E-1956 Need comma-separated credentials on stdin\n");
+                    freeOnce((void **)&pRequestTemplate);
+                    errorCode = 16;
+                } else {
+                    credentials[countToEol(credentials)] = '\0'; /* Remove \r or EOL */
+                    *(strchr(credentials, ',')) = '\0'; /* Split string */
+
+                    signingParameters[iACCESS_KEY_ID] = credentials;
+                    signingParameters[iSECRET_ACCESS_KEY] = credentials+strlen(credentials)+1;
+                }
+                
+            }
+        }
+        
+    }
+    
+    if (!errorCode) { /* Fill template */
         const char *pErrorMessage = 0;
-        char *pSHA256 = 0;
 
         int iError;
         
@@ -1919,122 +2061,53 @@ int main(int argc, char **argv)
                 }
             }
             fprintf(stderr, "%s at %d:%.*s\n", pErrorMessage, iError, cContext, pRequestTemplate + iError);
-            return 4;
+            errorCode = 4;
         }
+    }
+    if (!errorCode) { /* Prepare Content SHA256 and sign */
+        char *pSHA256 = 0;
+        const char *pErrorMessage = 0;
         if (scanSignature==0) {
-            /* Get from template */
+            /* Template has SHA256 */
             signingParameters[iSHA256] = (char *) 0;
-        } else if (scanSignature==1) {
-            /* Find an upload-file or data= field in the request. */
-            const char *pRead = pFilledRequest;
-            while(pRead) {
-                if (isCurlOptionName(pRead, "upload-file")) {
-                    char *fileName = 0;
-                    int nameLength;
-                    pRead += countToValue(pRead);
-                    nameLength = countToStr(pRead, "\x22");
-                    fileName = malloc(nameLength+1);
-                    if (!fileName) {
-                        perror("E-1741 malloc failed");
-                        return 11;
-                    }
-                    memmove(fileName, pRead, nameLength );
-                    fileName[nameLength] = '\0';
-
-                    pErrorMessage = librock_fileSha256Contents(fileName, &mdContent32[0]);
-                    if (pErrorMessage) {
-                        fprintf(stderr, "%s for file '%s'\n", pErrorMessage, fileName);
-                        fprintf(stderr, "I-1734 template expanded:\n%s\n", pFilledRequest);
-                        return 12;
-                    }
-                    
-                    freeOnce((void **)&fileName);
-                    break;
-                } else if (isCurlOptionName(pRead, "data") ||
-                           isCurlOptionName(pRead, "data-binary")
-                        ) {
-                    void *pHashInfo;
-                    int iStart = 0;
-                    int iParse = 0;
-                    pRead += countToValue(pRead);
-                    /* Compute hash */
-                    pHashInfo = malloc(librock_sha256Init(0)/*Get size */);
-                    if (!pHashInfo) {
-                        perror("E-1744 malloc failed");
-                        return 10;
-                    }
-                    librock_sha256Init(pHashInfo);
-                    while(pRead[iParse] && pRead[iParse] != '\n' && pRead[iParse]!= '\x22') {
-                        if (pRead[iParse] == '\\') {
-                            //These are the escapes that CURL recognizes */
-                            librock_sha256Update(pHashInfo, 
-                               (unsigned char *) pRead+iStart, iParse-iStart);
-                            if (pRead[iParse+1]=='t') {
-                                librock_sha256Update(pHashInfo, 
-                                   (const unsigned char *) "\t", 1);
-                            } else if (pRead[iParse+1]=='r') {
-                                librock_sha256Update(pHashInfo, 
-                                   (const unsigned char *) "\r", 1);
-                            } else if (pRead[iParse+1]=='n') {
-                                librock_sha256Update(pHashInfo, 
-                                   (const unsigned char *) "\n", 1);
-                            } else if (pRead[iParse+1]=='v') {
-                                librock_sha256Update(pHashInfo, 
-                                   (const unsigned char *) "\v", 1);
-                            } else {
-                                /* Just itself */
-                                librock_sha256Update(pHashInfo, 
-                                   (unsigned char *) pRead+iParse+1, 1);
-                            }
-                            iParse = iParse+2;
-                            iStart = iParse;
-                        } else {
-                            iParse++;
-                        }
-                    }
-                    librock_sha256Update(pHashInfo, 
-                       (unsigned char *) pRead+iStart, iParse-iStart);
-                    librock_sha256StoreFinal(mdContent32, pHashInfo);
-                    freeOnce((void **)&pHashInfo);
-                    break;
+        } else {
+            pErrorMessage = prepareSHA256(&pSHA256, scanSignature, mdContent32, pFilledRequest);
+            if (pErrorMessage) {
+                if (atoi(pErrorMessage+2)!= 1741) {
+                    fprintf(stderr, "%sI-1734 template expanded:\n%s\n", pErrorMessage, pFilledRequest);
+                } else {
+                    fprintf(stderr, "%s\n", pErrorMessage);
                 }
-                pRead = strchr(pRead, '\n');
-                if (pRead) {
-                    pRead++;
-                }
-                
+                errorCode = 12;
             }
-            if (!pRead) {
-                // Presume empty body is OK.
-            }
-        }
-        if (scanSignature == 1 || scanSignature == 2) {
-            int i;
-            pSHA256 = malloc(64+1);
-            if (!pSHA256) {
-                fprintf(stderr, "E-2079 malloc failed\n");
-                return 15;
-            }
-            for (i = 0; i < 32; i++) {
-                bToHex0(pSHA256 + i*2, mdContent32[i] & 0xff);
-            }
-            pSHA256[32*2] = '\0';
             signingParameters[iSHA256] = pSHA256;
         }
-        
-        pErrorMessage = librock_awsFillAndSign(
+        if (!errorCode) {
+            pErrorMessage = librock_awsFillAndSign(
                                pFilledRequest
                                , (const char **) signingParameters
                                , write_to_FILE, stdout
                                , bVerbose ? write_to_FILE : 0, stderr);
-        if (pErrorMessage) {
-            fprintf(stderr, "%s\n", pErrorMessage);
-            return 7;
+            if (pErrorMessage) {
+                fprintf(stderr, "%s\n", pErrorMessage);
+                errorCode = 7;
+            }
         }
-        freeOnce((void **)&pFilledRequest);
-        freeOnce((void **)&pSHA256);
     }
-    return 0;
+    
+    /* Clean up */
+    if (ppNamedArguments) {
+        int i = 0;
+        while(ppNamedArguments[i]) {
+             freeOnce( (void * *) & (ppNamedArguments[i]));
+             i++;
+        }
+        freeOnce((void **)&ppNamedArguments);
+    }
+
+    freeOnce((void **)&pFilledRequest);
+    freeOnce((void **)&pRequestTemplate);
+    return errorCode;
 }
 #endif
 
@@ -2353,7 +2426,8 @@ PRIVATE char *mallocNamedValue(const char *pName)
     char *pValue = 0;
     int cNeeded = 0;
 #if defined LIBROCK_WANT_GETENV_S_FOR_MSC_VER
-    if (getenv_s(&cNeeded, 0, 0, pName) == ERANGE) {
+    getenv_s(&cNeeded, 0, 0, pName);
+    if (cNeeded) {
         /* Found */
         pValue = malloc(cNeeded+1);
         if (pValue) {
@@ -2590,7 +2664,7 @@ PRIVATE const char *librock_fillTemplate(
         }
         if (cRead != fileLength) {
             librock_fdClose(fd);
-            free(pContents);
+            freeOnce((void **) &pContents);
             return 0;
         }
         ((char *)pContents)[fileLength] = '\0';
@@ -2641,6 +2715,9 @@ int librock_triggerAlternateBranch(const char *name, long *pLong)
     if (!name) { /* Call once this way, for the whole application */
         remove("librock_armAlternateBranch_next.txt");
         rename("librock_armAlternateBranch.txt", "librock_armAlternateBranch_next.txt");
+    }
+    if (pLong) {
+        *pLong = -1;
     }
     return 0;
 }

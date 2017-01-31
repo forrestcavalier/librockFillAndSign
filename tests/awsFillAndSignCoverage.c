@@ -65,7 +65,7 @@ int librock_triggerAlternateBranch(const char *name, long *pLong)
     return 0;
     
 } /* librock_triggerAlternateBranch */
-time_t time( time_t *arg )
+time_t librock_coverage_time( time_t *arg )
 {
     time_t fixed = 0;
     if (arg) {
@@ -276,6 +276,9 @@ int librock_coverage_main()
 } /* librock_coverage_main */
 #undef malloc
 #undef realloc
+#undef free
+#undef freeOnce
+
 long librock_iFaultInjection_malloc;
 void *librock_FaultInjection_malloc(size_t size)
 {
