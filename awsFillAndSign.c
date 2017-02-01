@@ -174,12 +174,13 @@ void *librock_FaultInjection_realloc(void *p, size_t);
 #define malloc librock_FaultInjection_malloc
 #define realloc librock_FaultInjection_realloc
 
+
 time_t librock_coverage_time( time_t *arg ); //Always return 0
 #define time librock_coverage_time
 #else
 #define GLOBAL_ALTERNATE_BRANCH 0
 #endif
-static void freeOnce(void **);
+static void freeOnce(void **p);
 
 #include "librock_postinclude.h"
 
@@ -736,6 +737,8 @@ PRIVATE const char *librock_awsSignature_canonicalQueryString_(struct librock_ap
             return "E-683 malloc failed";
         }
         if (!librock_safeAppend0(&aCopy, (char*)paParameter->p + iStartString, strlen((char*)paParameter->p + iStartString))) {
+            freeOnce((void **)&pList);
+            freeOnce((void **)&(aCopy.p));
             return "E-601 would overflow pre-allocated block";
         }
         pFix = aCopy.p;
@@ -762,10 +765,14 @@ PRIVATE const char *librock_awsSignature_canonicalQueryString_(struct librock_ap
         for(i = 0; i < cParameters; i++) {
             if (i > 0) {
                 if (!librock_safeAppend0(paParameter, "&", 1)) {
+                    freeOnce((void **)&pList);
+                    freeOnce((void *)&(aCopy.p));
                     return "E-601 would overflow pre-allocated block";
                 }
             }
             if (!librock_safeAppend0(paParameter, pList[i], strlen(pList[i]))) { 
+                freeOnce((void **)&pList);
+                freeOnce((void *)&(aCopy.p));
                 return "E-601 would overflow pre-allocated block";
             }
         }
@@ -891,6 +898,7 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
         pRead++;
         pErrorMessage = librock_awsSignature_canonicalQueryString_(&aParameter, &pRead, pRequest->bFormatCURL);
         if (pErrorMessage) {
+            freeOnce((void **) & aParameter.p);
             return pErrorMessage;
         }
     }
@@ -1053,11 +1061,12 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
     ((char *) aParameter.p)[aParameter.iWriting] = '\0';
     
     { /* Create the Canonical request from template */
-        char *pCanonicalRequest;
+        char *pCanonicalRequest = 0;
         const char *pErrorMessage = librock_fillTemplate(&pCanonicalRequest, pCanonicalRequestTemplate, -1, 0, 7, &pParameterList[0], 0);
         if (pErrorMessage) {
             freeOnce((void **) & pRequest->pSignedHeaders);
             freeOnce((void **) & aParameter.p);
+            freeOnce((void **) & pCanonicalRequest);
             return pErrorMessage;
         }
 
@@ -1577,7 +1586,7 @@ const char *mallocNamedTemplate(char **ppRequestTemplate,int fromFile,const char
             return "I-1515 no built-in template";
         }
         size = strlen(pBuiltIn);
-        *ppRequestTemplate = malloc(size);
+        *ppRequestTemplate = malloc(size+1);
         if (!*ppRequestTemplate) {
             return "I-1515 malloc failed";
         }
@@ -1618,11 +1627,11 @@ const char *prepareSHA256(char **ppSHA256,int scanType, unsigned char *mdContent
                 fileName[nameLength] = '\0';
 
                 pErrorMessage = librock_fileSha256Contents(fileName, &mdContent32[0]);
+                freeOnce((void **)&fileName);
                 if (pErrorMessage) {
                     return pErrorMessage;
                 }
                 
-                freeOnce((void **)&fileName);
                 break;
             } else if (isCurlOptionName(pRead, "data") ||
                        isCurlOptionName(pRead, "data-binary")
@@ -1852,6 +1861,9 @@ int main(int argc, char **argv)
     fprintf(stderr,"I-1474 %s(COVERAGE TEST)", argv[0]);
     while(argumentIndex < argc) {
         fprintf(stderr, " %s", argv[argumentIndex]);
+        if (!strncmp(argv[argumentIndex],"-Dtest=",7)) {
+            putenv(argv[argumentIndex]+2);
+        }
         argumentIndex++;
     }
     fprintf(stderr,"\n");
@@ -1950,13 +1962,13 @@ int main(int argc, char **argv)
     
     { /* Get template */
         const char *pName = argv[argumentIndex];
-        const char *pMessage = mallocNamedTemplate(&pRequestTemplate,fromFile,pName);
-        if (pMessage) {
+        const char *pErrorMessage = mallocNamedTemplate(&pRequestTemplate,fromFile,pName);
+        if (pErrorMessage) {
             if (fromFile) {
-                perror(pMessage);
+                perror(pErrorMessage);
                 fprintf(stderr, " when loading template file '%s'\n", pName);
             } else {
-                fprintf(stderr, "%s when loading built-in template '%s'\n", pMessage, pName);
+                fprintf(stderr, "%s when loading built-in template '%s'\n", pErrorMessage, pName);
             }
             return 14;
         }
@@ -1972,10 +1984,10 @@ int main(int argc, char **argv)
 
     { /* Determine Signing Parameters */
         const char *pName;
-        const char * pMessage = collectNamedParameters(&ppNamedArguments,pRequestTemplate);
+        const char *pErrorMessage = collectNamedParameters(&ppNamedArguments,pRequestTemplate);
 
-        if (pMessage) {
-            fprintf(stderr, "%s\n", pMessage);
+        if (pErrorMessage) {
+            fprintf(stderr, "%s\n", pErrorMessage);
             freeOnce((void **)&pRequestTemplate);
             errorCode = 14;
         } else {
@@ -1987,18 +1999,17 @@ int main(int argc, char **argv)
             signingParameters[iSERVICE_NAME] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
             pName = "AWS_SECURITY_TOKEN";
             signingParameters[iSECURITY_TOKEN] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
-            
             if (credentialsFromEnv) {
                 const char *pName;
-                pMessage = collectNamedDefaults(&ppNamedArguments, 
+                pErrorMessage = collectNamedDefaults(&ppNamedArguments, 
                         "@eAWS_ACCESS_KEY_ID@,@eAWS_SECRET_ACCESS_KEY@");
-                if (!pMessage) {
+                if (!pErrorMessage) {
                     pName = "AWS_ACCESS_KEY_ID";
                     signingParameters[iACCESS_KEY_ID] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
                     pName = "AWS_SECRET_ACCESS_KEY";
                     signingParameters[iSECRET_ACCESS_KEY] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
                 } else {
-                    fprintf(stderr, "%s\n", pMessage);
+                    fprintf(stderr, "%s\n", pErrorMessage);
                     errorCode = 14;
                 }
             } else {
@@ -2093,6 +2104,7 @@ int main(int argc, char **argv)
                 errorCode = 7;
             }
         }
+        freeOnce((void **)&pSHA256);
     }
     
     /* Clean up */
@@ -2345,6 +2357,7 @@ int main(int argc, char **argv)
             *p = 0;
         }
     }
+    
     PRIVATE void bToHex0(char *pWrite, unsigned char ch)
     {
         char *digits = "0123456789abcdef";
@@ -2631,6 +2644,7 @@ PRIVATE const char *librock_fillTemplate(
         } /* while parse template */
         if (pErrorMessage) {
             *pErrorIndex = pRead - pTemplate;
+            freeOnce(&(aFilled.p));
             return pErrorMessage;
         }
     } /* two passes */

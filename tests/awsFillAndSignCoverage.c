@@ -1,6 +1,7 @@
 #if defined librock_WANT_ALTERNATE_BRANCHING
 int librock_triggerAlternateBranch(const char *name, long *pLong)
 {
+    FILE *f;
     /* Cases:
            Coverage support not compiled in.
            Coverage support compiled in, no named test.
@@ -14,7 +15,6 @@ int librock_triggerAlternateBranch(const char *name, long *pLong)
         return 0;
     }
     
-    FILE *f;
     if (*pLong == -1) { /* Not injecting */
         return 0;
     } else if (*pLong == 0) {
@@ -87,6 +87,7 @@ int librock_coverage_main()
 
     librock_appendableSet(&aTest, 0, 200, realloc);
     librock_appendableSet(&aTest, aTest.p, 200, realloc);
+    freeOnce(&aTest.p);    
     
     pHashInfo = malloc(librock_sha256Init(0)/*Get size */);
     if (pHashInfo) {
@@ -218,6 +219,7 @@ int librock_coverage_main()
             ppStringList[iString] = "test2";
         }
         iString = librock_stringListGetIndex(&ppStringList, 1, "test2", 4);
+        free(ppStringList);
     }
     fprintf(stderr,"I-206\n");
     if (1) {
