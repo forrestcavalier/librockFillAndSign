@@ -254,19 +254,34 @@ int librock_coverage_main()
         needEncoding("%");
         needEncoding("%0");
         needEncoding("%00");
-        pRead = "%44";
-        librock_awsSignature_canonicalQueryString_(&aBuffer, &pRead, 0);
-        pRead = "%AA";
-        librock_awsSignature_canonicalQueryString_(&aBuffer, &pRead, 0);
-        pRead = "%";
-        librock_awsSignature_canonicalQueryString_(&aBuffer, &pRead, 0);
-        pRead = "%Z";
-        librock_awsSignature_canonicalQueryString_(&aBuffer, &pRead, 0);
-        pRead = "%AZ";
-        librock_awsSignature_canonicalQueryString_(&aBuffer, &pRead, 0);
-        pRead = "%30%3A%2e%40%41%61%60%7D%7E%5F%2D0*.@Aa`}~_-";
-        librock_awsSignature_canonicalQueryString_(&aBuffer, &pRead, 0);
- 
+        {/* Trigger code branches librock_safeAppendBase64Encoded0 */
+            librock_appendableSet(&aBuffer, credentials, sizeof(credentials), 0);
+            aBuffer.iWriting = aBuffer.cb-2; // Set position near end
+            librock_safeAppendBase64Encoded0(&aBuffer,"FILL",4);
+            librock_safeAppendBase64Encoded0(&aBuffer,"FILL",-1);
+            
+            aBuffer.iWriting = aBuffer.cb-2; // Set position near end
+            librock_safeAppendBase64Encoded0(&aBuffer,"",0);
+
+            librock_appendableSet(&aBuffer, 0, 0, 0);
+            librock_safeAppendBase64Encoded0(&aBuffer,"FILL",4);
+            
+        }
+        {
+            librock_appendableSet(&aBuffer, credentials, sizeof(credentials), 0);
+            pRead = "%44";
+            librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
+            pRead = "%AA";
+            librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
+            pRead = "%";
+            librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
+            pRead = "%Z";
+            librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
+            pRead = "%AZ";
+            librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
+            pRead = "%30%3A%2e%40%41%61%60%7D%7E%5F%2D0*.@Aa`}~_-";
+            librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
+        }
     }
     fprintf(stderr,"I-253\n");
     countToEol("\r");

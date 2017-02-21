@@ -59,10 +59,10 @@ TABLE OF CONTENTS FOR THE REST OF THIS FILE
 #include "librock_postinclude.h"
 
 //[[Predeclarations of functions from librock_sha256.c]]
-
- 	int librock_sha256Init(void *c);
-	int librock_sha256Update(void *c, const void *data_, size_t len);
-	int librock_sha256StoreFinal(unsigned char *md, void *c);
+struct librock_SHA256_CTX;
+ 	int librock_sha256Init(struct librock_SHA256_CTX *c);
+	int librock_sha256Update(struct librock_SHA256_CTX *c, const void *data_, int len);
+	int librock_sha256StoreFinal(unsigned char *md, struct librock_SHA256_CTX *c);
 
 //[[Implementation]]
 

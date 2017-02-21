@@ -1,0 +1,13 @@
+@//aws-simpledb-list-domains.curl
+@// TEMPLATE FOR:  AWS SimpleDB
+@//
+@// TEMPLATE REVISION:    2017-02-03 by MIB SOFTWARE, INC
+@// TEMPLATE LICENSE:     MIT (Free/Open source, No Warranty)
+@// TEMPLATE PARAMETERS:  None
+@//
+@// (Before using CURL, use awsFillAndSign by MIB SOFTWARE to fill the
+@// template, strip comments, and add headers for AWS Signature version 4.)
+@//
+@//.default.AWS_SERVICE_NAME=sdb
+url="https://sdb@eAWS_REGION_NOT_USEAST1@.amazonaws.com/?Version=2009-04-15&Signature=replaced&AWSAccessKeyId=@eAWS_ACCESS_KEY_ID@&SignatureMethod=HmacSHA256&SignatureVersion=2&Timestamp=@eAWS_AMZDATE@&Action=ListDomains"
+header="Host:sdb@eAWS_REGION_NOT_USEAST1@.amazonaws.com"

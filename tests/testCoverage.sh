@@ -27,6 +27,11 @@ export AWS_SECURITY_TOKEN=test_example_security_token
 ./awsFillAndSign -Dtest=23 --list FileDoesNotExist 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=24 --help 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=25 --coverage 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=26 --verbose aws-simpledb-list-domains.curl 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=26b --verbose --from-file tests/test-curl-badv2.curl 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=26c --verbose --from-file tests/test-curl-badv2b.curl 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=26d --verbose --from-file tests/test-curl-v2.curl 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=26e --from-file tests/test-curl-v2.curl 2>>tests/$FIFILE
 
 echo "" | ./awsFillAndSign -Dtest=27 --read-key - --help 2>>tests/$FIFILE
 echo "" | ./awsFillAndSign -Dtest=28 --read-key --from-file FileDoesNotExist 2>>tests/$FIFILE
@@ -35,7 +40,7 @@ echo "" | ./awsFillAndSign -Dtest=28 --read-key --from-file FileDoesNotExist 2>>
 ./awsFillAndSign -Dtest=29c --list bad-template2.curl 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=29d bad-template3.curl 2>>tests/$FIFILE
 
-echo "x/x,y,zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz" | ./awsFillAndSign --read-key aws-s3-list.curl bucketname prefix 2>>tests/$FIFILE
+echo "x/x,y,zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz" | ./awsFillAndSign -Dtest=30 --read-key aws-s3-list.curl bucketname prefix 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=31 --verbose aws-s3-list.curl bucketname prefix 2>>tests/$FIFILE
 
 # Upload file
@@ -51,7 +56,7 @@ echo x | ./awsFillAndSign -Dtest=42 --read-key aws-s3-list.curl bucketname prefi
 echo x/ | ./awsFillAndSign -Dtest=42b --read-key aws-s3-list.curl bucketname prefix 2>>tests/$FIFILE
 echo x, | ./awsFillAndSign -Dtest=43 --read-key aws-s3-list.curl bucketname prefix 2>>tests/$FIFILE
 echo x,y,z | ./awsFillAndSign -Dtest=44 --read-key -DCLParam=%%test --from-file tests/test-raw.txt param1 2>>tests/$FIFILE
-echo x,zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz | ./awsFillAndSign --read-key -DCLParam=%%test --from-file tests/test-raw.txt param1 2>>tests/$FIFILE
+echo x,zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz | ./awsFillAndSign -Dtest=44b --read-key -DCLParam=%%test --from-file tests/test-raw.txt param1 2>>tests/$FIFILE
 
 # escapes and parameter testing.
 echo y,z | ./awsFillAndSign 2>>tests/$FIFILE
@@ -78,6 +83,9 @@ echo y,z | ./awsFillAndSign -Dtest=63b --read-key --verbose -DCLParam=%%test --f
 echo y,z | ./awsFillAndSign -Dtest=63c --read-key --verbose -DCLParam=%%test --from-file tests/test-raw9.txt param1@ 2>>tests/$FIFILE
 echo y,z | ./awsFillAndSign -Dtest=64 --read-key --verbose -D CLParam=%%test --from-file tests/test-truncated-data1.curl 2>>tests/$FIFILE
 echo y,z | ./awsFillAndSign -Dtest=65 --read-key --verbose -D CLParam=%%test --from-file tests/test-truncated-data2.curl 2>>tests/$FIFILE
+echo y,z | ./awsFillAndSign -Dtest=66 --read-key --verbose --from-file tests/test-raw11.txt 2>>tests/$FIFILE
+echo y,z | ./awsFillAndSign -Dtest=66b --read-key --verbose --from-file tests/test-raw12.txt 2>>tests/$FIFILE
+echo y,z | ./awsFillAndSign -Dtest=67 --read-key --verbose --from-file tests/test-post1.curl 2>>tests/$FIFILE
 
 # invalid command line parameters
 echo y,z | ./awsFillAndSign -Dtest=68 --read-key --verbose -D 2>>tests/$FIFILE
@@ -175,6 +183,18 @@ do
   done
 if [ "$SHOW_MALLOC4" = "true" ]; then echo SHOWING tests/$FIFILE ; cat tests/$FIFILE; fi
 
+
+# stringListGetIndex failure. Uses realloc, not malloc.
+echo "malloc 1" >librock_armAlternateBranch.txt
+export FIFILE=coverageMalloc5.err
+rm tests/$FIFILE
+while [ -f librock_armAlternateBranch.txt ]
+do
+    cat librock_armAlternateBranch.txt
+    cat librock_armAlternateBranch.txt 2>>tests/$FIFILE
+    ./awsFillAndSign --verbose aws-simpledb-list-domains.curl 2>>tests/$FIFILE
+  done
+if [ "$SHOW_MALLOC5" = "true" ]; then echo SHOWING tests/$FIFILE ; cat tests/$FIFILE; fi
 
 echo "global 1" >librock_armAlternateBranch.txt
 export FIFILE=coverageGlobal.err

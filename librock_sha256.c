@@ -205,7 +205,7 @@ typedef struct librock_SHA256_CTX {
 int librock_sha256Init(struct librock_SHA256_CTX *c)
 { //by Forrest Cavalier III, MIB SOFTWARE, INC.
     if (!c) {//mibsoftware.com Allow caller to use opaque structures.
-        return sizeof(*c);
+        return sizeof(struct librock_SHA256_CTX);
     }
     c->data_length_digits_[0] = 0;
     c->data_length_digits_[1] = 0;

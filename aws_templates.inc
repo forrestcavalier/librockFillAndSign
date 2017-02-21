@@ -53,3 +53,9 @@
 
 //Amazon Simple Queue Service 
 #include "aws-curl-templates/aws_sqs_templates.inc"
+
+//Amazon Simple Notification Service
+#include "aws-curl-templates/aws_sns_templates.inc"
+
+//SimpleDB
+#include "aws-curl-templates/aws_simpledb_templates.inc"
