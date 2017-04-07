@@ -364,6 +364,7 @@ const char *librock_awsFillAndSign(
 #define iSECURITY_TOKEN 3
 #define iACCESS_KEY_ID 4
 #define iSECRET_ACCESS_KEY 5
+#define iCONTENT_LENGTH 6
 
     if (!pRequestWithoutBody) {
         return("E-309 need request");
@@ -1366,6 +1367,7 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
                     } else if (isCurlOptionName(pStart, "data") && pRequest->signatureV2) {
                         (*(pRequest->fnOutput))(pRequest->outputId, "&Signature=", 11);
                         (*(pRequest->fnOutput))(pRequest->outputId, base64Version2, strlen(base64Version2));
+                        pRequest->ppSigningParameters[iCONTENT_LENGTH] += 11 + strlen(base64Version2);
                     }
                     if (*pHeader == '\"') {
                         (*(pRequest->fnOutput))(pRequest->outputId, pHeader, 1);
@@ -1488,6 +1490,34 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
                 }
             }
         }
+        if (pRequest->ppSigningParameters[iCONTENT_LENGTH] > 0) {
+            unsigned long value = (unsigned long) (pRequest->ppSigningParameters[iCONTENT_LENGTH]);
+            char buf[40];
+            int i = sizeof(buf);
+            /* to string, avoiding sprintf */
+            i--;
+            buf[i] = '\0';
+            do {
+                i--;
+                buf[i] = (value % 10) + '0';
+                value /= 10;
+            } while(value);
+            
+            if (pRequest->bFormatCURL) {
+                pLiteral = "header = \x22""Content-Length:";
+            } else {
+                pLiteral = "Content-Length:";
+            }
+            (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
+        
+            (*(pRequest->fnOutput))(pRequest->outputId, buf+i, strlen(buf+i));
+            
+            if (pRequest->bFormatCURL) {
+                (*(pRequest->fnOutput))(pRequest->outputId, "\x22", 1);           
+            }
+            (*(pRequest->fnOutput))(pRequest->outputId, "\n", 1);
+
+        }
     }
     return 0;
 } /* librock_awsSignature_outputWithAuthorization */
@@ -1545,7 +1575,7 @@ PRIVATE int write_to_FILE(void *id, const char *pRead, int len)
     fflush((FILE *)id);
     return cWritten;
 } /* write_to_FILE */
-
+#endif
 
 int librock_stringListGetIndex(char ***ppNamedArguments,int cStep, const char *pName, int cName)
 {
@@ -1581,6 +1611,7 @@ int librock_stringListGetIndex(char ***ppNamedArguments,int cStep, const char *p
     return iString;
 } /* librock_stringListGetIndex */
 
+#if defined(LIBROCK_AWSFILLANDSIGN_MAIN)
 
 PRIVATE const char *collectNamedDefaults(char ***ppNamedArguments, const char *pRequestTemplate)
 { /* Scan a template for @//.default. entries */
@@ -1735,7 +1766,7 @@ const char *mallocNamedTemplate(char **ppRequestTemplate,int fromFile,const char
 
 } /* mallocNamedTemplate */
 
-const char *prepareSHA256(char **ppSHA256,int scanType, unsigned char *mdContent32, const char *pFilledRequest)
+const char *prepareSHA256(char **ppSHA256,int scanType, unsigned long *contentLength, unsigned char *mdContent32, const char *pFilledRequest)
 {
     if (scanType == 1) { /* process CURL options to determine body */
         /* Find an upload-file or data= field in the request. */
@@ -1755,11 +1786,20 @@ const char *prepareSHA256(char **ppSHA256,int scanType, unsigned char *mdContent
                 fileName[nameLength] = '\0';
 
                 pErrorMessage = librock_fileSha256Contents(fileName, &mdContent32[0]);
+                if (!pErrorMessage) {
+                    int fd;
+                    fd = librock_fdOpenReadOnly(fileName);
+                    if (fd == -1) {
+                        pErrorMessage = "E-1797 Could not open upload file to create SHA256";
+                    } else {
+                        *contentLength = librock_fdSeek(fd, 0, SEEK_END);
+                        librock_fdClose(fd);
+                    }
+                }                
                 freeOnce((void **)&fileName);
                 if (pErrorMessage) {
                     return pErrorMessage;
                 }
-                
                 break;
             } else if (isCurlOptionName(pRead, "data") ||
                        isCurlOptionName(pRead, "data-binary")
@@ -1771,8 +1811,9 @@ const char *prepareSHA256(char **ppSHA256,int scanType, unsigned char *mdContent
                 /* Compute hash */
                 pHashInfo = malloc(librock_sha256Init(0)/*Get size */);
                 if (!pHashInfo) {
-                    return "E-1744 malloc failed";
+                    return "E-1741 malloc failed";
                 }
+                *contentLength = 0;
                 librock_sha256Init(pHashInfo);
                 while(pRead[iParse] && pRead[iParse] != '\n' && pRead[iParse]!= '\x22') {
                     if (pRead[iParse] == '\\') {
@@ -1796,6 +1837,8 @@ const char *prepareSHA256(char **ppSHA256,int scanType, unsigned char *mdContent
                             librock_sha256Update(pHashInfo, 
                                (unsigned char *) pRead+iParse+1, 1);
                         }
+                        *contentLength += iParse-iStart+1;
+                        
                         iParse = iParse+2;
                         iStart = iParse;
                     } else {
@@ -1804,6 +1847,7 @@ const char *prepareSHA256(char **ppSHA256,int scanType, unsigned char *mdContent
                 }
                 librock_sha256Update(pHashInfo, 
                    (unsigned char *) pRead+iStart, iParse-iStart);
+                *contentLength += iParse-iStart;
                 librock_sha256StoreFinal(mdContent32, pHashInfo);
                 freeOnce((void **)&pHashInfo);
                 break;
@@ -1822,7 +1866,7 @@ const char *prepareSHA256(char **ppSHA256,int scanType, unsigned char *mdContent
         int i;
         *ppSHA256 = malloc(64+1);
         if (!*ppSHA256) {
-            return "E-1744 malloc failed";
+            return "E-1741 malloc failed";
         }
         for (i = 0; i < 32; i++) {
             bToHex0(*ppSHA256 + i*2, mdContent32[i] & 0xff);
@@ -1975,7 +2019,7 @@ int main(int argc, char **argv)
     int iEncodeParameters = 0;
     int credentialsFromEnv = 1;
     char credentials[200];
-    char *signingParameters[6];
+    char *signingParameters[7];
     unsigned char mdContent32[] = { /* SHA256 of empty string */
         0xe3,0xb0,0xc4,0x42,0x98,0xfc,0x1c,0x14,0x9a,0xfb,0xf4,0xc8,0x99,0x6f,0xb9,0x24,0x27,0xae,0x41,0xe4,0x64,0x9b,0x93,0x4c,0xa4,0x95,0x99,0x1b,0x78,0x52,0xb8,0x55
     };
@@ -2255,10 +2299,10 @@ int main(int argc, char **argv)
             /* Template has SHA256 */
             signingParameters[iSHA256] = (char *) 0;
         } else {
-            pErrorMessage = prepareSHA256(&pSHA256, scanSignature, mdContent32, pFilledRequest);
+            pErrorMessage = prepareSHA256(&pSHA256, scanSignature, (unsigned long *) &signingParameters[iCONTENT_LENGTH], mdContent32, pFilledRequest);
             if (pErrorMessage) {
                 if (atoi(pErrorMessage+2)!= 1741) {
-                    fprintf(stderr, "%sI-1734 template expanded:\n%s\n", pErrorMessage, pFilledRequest);
+                    fprintf(stderr, "%s\nI-1734 template expanded:\n%s\n", pErrorMessage, pFilledRequest);
                 } else {
                     fprintf(stderr, "%s\n", pErrorMessage);
                 }
