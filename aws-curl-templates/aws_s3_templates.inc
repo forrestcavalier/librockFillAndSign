@@ -65,7 +65,7 @@
     "\n""@//   	                CURL parameter."
     "\n""@//   @3_objectname@ - The S3 object name."
     "\n""@//.default.AWS_SERVICE_NAME=s3"
-    "\n""url=\"https://@1_bucket@.s3.amazonaws.com/@3_objectname@\""
+    "\n""url=\"https://@1_bucket@.s3.amazonaws.com/@p3_objectname@\""
     "\n""upload-file = \"@p2_filename@\""
     "\n""header = \"Host: @1_bucket@.s3.amazonaws.com\""
 
@@ -75,7 +75,7 @@
     "\n""@//   @1_bucket@ - bucket name"
     "\n""@//   @2_object@ - object name"
     "\n""@//.default.AWS_SERVICE_NAME=s3"
-    "\n""url=\"https://@1_bucket@.s3.amazonaws.com/@2_object@@peQueryExtra@\""
+    "\n""url=\"https://@1_bucket@.s3.amazonaws.com/@p2_object@@peQueryExtra@\""
     "\n""header = \"Host: @1_bucket@.s3.amazonaws.com\""
 
 ,"@//aws-s3-delete.curl;2016-11-26;MIB SOFTWARE, INC;MIT (Free/Open source, No Warranty)"
@@ -85,5 +85,5 @@
     "\n""@//   @2_object@ - object name"
     "\n""@//.default.AWS_SERVICE_NAME=s3"
     "\n""request = \"DELETE\""
-    "\n""url=\"https://@1_bucket@.s3.amazonaws.com/@2_object@\""
+    "\n""url=\"https://@1_bucket@.s3.amazonaws.com/@p2_object@\""
     "\n""header = \"Host: @1_bucket@.s3.amazonaws.com\""
