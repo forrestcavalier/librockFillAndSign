@@ -257,14 +257,14 @@ int librock_coverage_main()
         {/* Trigger code branches librock_safeAppendBase64Encoded0 */
             librock_appendableSet(&aBuffer, credentials, sizeof(credentials), 0);
             aBuffer.iWriting = aBuffer.cb-2; // Set position near end
-            librock_safeAppendBase64Encoded0(&aBuffer,"FILL",4);
-            librock_safeAppendBase64Encoded0(&aBuffer,"FILL",-1);
+            librock_safeAppendBase64Encoded0(&aBuffer,(const unsigned char *)"FILL",4);
+            librock_safeAppendBase64Encoded0(&aBuffer,(const unsigned char *)"FILL",-1);
             
             aBuffer.iWriting = aBuffer.cb-2; // Set position near end
-            librock_safeAppendBase64Encoded0(&aBuffer,"",0);
+            librock_safeAppendBase64Encoded0(&aBuffer,(const unsigned char *)"",0);
 
             librock_appendableSet(&aBuffer, 0, 0, 0);
-            librock_safeAppendBase64Encoded0(&aBuffer,"FILL",4);
+            librock_safeAppendBase64Encoded0(&aBuffer,(const unsigned char *)"FILL",4);
             
         }
         {
