@@ -293,11 +293,11 @@ static void freeOnce(void **p);
                         int cSource);
     PRIVATE char *librock_safeAppendBase64Encoded0(
                         struct librock_appendable *pAppendable,
-                        const char *pSource,
+                        const unsigned char *pSource,
                         int cSource);
 
 #ifdef LIBROCK_AWSFILLANDSIGN_MAIN
-    PRIVATE const char *librock_fileSha256Contents(const char *fname, unsigned char *mdBuffer32); /* store 32 bytes, returns error explanation or 0 */
+    PRIVATE const char *librock_fileSha256Contents(const char *fname, unsigned char *mdBuffer32, unsigned long *contentLength); /* store 32 bytes, returns error explanation or 0 */
     PRIVATE void *librock_fileGetContents(const char *fname); /* allocate memory, read entire file */
 #endif
     PRIVATE void bToHex0(char *pWrite, unsigned char ch); /* To hexadecimal, avoid sprintf */
@@ -1263,7 +1263,7 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
                 pToSign,
                 strlen(pToSign));
                 
-        librock_safeAppendBase64Encoded0(&a, (char *) resultSha,32);
+        librock_safeAppendBase64Encoded0(&a, resultSha,32);
 
         librock_appendableSet(&a,base64Version2,sizeof(base64Version2),0);
         librock_safeAppendUrlEncoded0(&a,buffer1,strlen(buffer1));
@@ -1785,17 +1785,7 @@ const char *prepareSHA256(char **ppSHA256,int scanType, unsigned long *contentLe
                 memmove(fileName, pRead, nameLength );
                 fileName[nameLength] = '\0';
 
-                pErrorMessage = librock_fileSha256Contents(fileName, &mdContent32[0]);
-                if (!pErrorMessage) {
-                    int fd;
-                    fd = librock_fdOpenReadOnly(fileName);
-                    if (fd == -1) {
-                        pErrorMessage = "E-1797 Could not open upload file to create SHA256";
-                    } else {
-                        *contentLength = librock_fdSeek(fd, 0, SEEK_END);
-                        librock_fdClose(fd);
-                    }
-                }                
+                pErrorMessage = librock_fileSha256Contents(fileName, &mdContent32[0], contentLength);
                 freeOnce((void **)&fileName);
                 if (pErrorMessage) {
                     return pErrorMessage;
@@ -2102,6 +2092,8 @@ int main(int argc, char **argv)
             } else if (!strncmp(argv[argumentIndex], "-b", 2)) {
                 const char *pBody = 0;
                 const char *pErrorMessage;
+                unsigned long contentLength;
+                
                 scanSignature = 2;
                 if (!strcmp(argv[argumentIndex], "-b")) {
                     if (argumentIndex + 1 >= argc) {
@@ -2113,11 +2105,12 @@ int main(int argc, char **argv)
                 } else {
                     pBody = argv[argumentIndex]+2;
                 }
-                pErrorMessage = librock_fileSha256Contents(pBody, &mdContent32[0]);
+                pErrorMessage = librock_fileSha256Contents(pBody, &mdContent32[0], &contentLength);
                 if (pErrorMessage) {
                     fprintf(stderr, "%s for file '%s'\n", pErrorMessage, pBody);
                     return 7;
                 }
+                signingParameters[iCONTENT_LENGTH] = (void *) contentLength;
             } else {
                 fprintf(stderr, "E-1457 Unrecognized option: %s\nTry --help.\n",argv[argumentIndex]);
                 return 8;
@@ -2652,7 +2645,7 @@ PRIVATE char *librock_safeAppendUrlEncoded0(struct librock_appendable *pAppendab
     return (char *)pAppendable->p + iStart;
 }
 
-PRIVATE char *librock_safeAppendBase64Encoded0(struct librock_appendable *pAppendable, const char *pSource, int cSource)
+PRIVATE char *librock_safeAppendBase64Encoded0(struct librock_appendable *pAppendable, const unsigned char *pSource, int cSource)
 {  /* If pAppendable->p is 0, increment pAppendable->cb for what is needed
       to URL-encode cSource bytes of pSource.
 
@@ -2663,7 +2656,7 @@ PRIVATE char *librock_safeAppendBase64Encoded0(struct librock_appendable *pAppen
       If the buffer would overflow, set the write position to the last location, and return 0.
       
     */
-    const char *pRead = pSource;
+    const unsigned char *pRead = pSource;
     long accumulator = 1;
     char *pWrite = 0;
     int cPad = 0;
@@ -2672,7 +2665,7 @@ PRIVATE char *librock_safeAppendBase64Encoded0(struct librock_appendable *pAppen
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"};
 
     if (cSource == -1) {
-        cSource = strlen(pSource);
+        cSource = strlen((const char *) pSource);
     }
     while(1) {
         if (pRead < pSource + cSource) {
@@ -2976,7 +2969,7 @@ PRIVATE const char *librock_fillTemplate(
     } /* librock_fileGetContents */
 #endif
 #if defined(LIBROCK_AWSFILLANDSIGN_MAIN) || defined(LIBROCK_WANT_fileSha256Contents)
-    PRIVATE const char *librock_fileSha256Contents(const char *fname, unsigned char *mdBuffer32)
+    PRIVATE const char *librock_fileSha256Contents(const char *fname, unsigned char *mdBuffer32, unsigned long *contentLength)
     {
         int fd;
         int cRead;
@@ -2991,8 +2984,10 @@ PRIVATE const char *librock_fillTemplate(
             return "E-1821 could not open file";
         }
         librock_sha256Init(pHashInfo);
+        *contentLength = 0;
         while ((cRead = librock_fdRead(fd, buf, sizeof(buf))) > 0) {
             librock_sha256Update(pHashInfo, (unsigned char *) buf,  cRead);
+            *contentLength += cRead;
         }
         librock_sha256StoreFinal(mdBuffer32, pHashInfo);
         freeOnce((void **)&pHashInfo);
