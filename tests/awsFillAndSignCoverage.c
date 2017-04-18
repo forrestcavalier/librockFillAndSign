@@ -117,95 +117,64 @@ int librock_coverage_main()
         free(pHashInfo);
     }
     {
-        const char *pSigningParameters[6];
-        pSigningParameters[0] = 0;
-        pSigningParameters[1] = 0;
-        pSigningParameters[2] = 0;
-        pSigningParameters[3] = 0;
-        pSigningParameters[4] = 0;
-        pSigningParameters[5] = 0;
+        struct librock_awsFillAndSignParameters_s signingParameters;
+        memset(&signingParameters, '\0', sizeof(signingParameters));
         pString = librock_awsFillAndSign(
             0
-            ,0
-            ,0
-            ,0
-            ,0
-            ,0
+            ,&signingParameters
             );
         fprintf(stderr,"I-2393 %s\n", pString ? pString : "");
 
         pString = librock_awsFillAndSign(
             "request"
             ,0
-            ,0
-            ,0
-            ,0
-            ,0
             );
         fprintf(stderr,"I-2402 %s\n", pString ? pString : "");
 
         pString = librock_awsFillAndSign(
             "request"
-            ,pSigningParameters
-            ,0
-            ,0
-            ,0
-            ,0
+            ,&signingParameters
             );
         fprintf(stderr,"I-2402 %s\n", pString ? pString : "");
 
-        pSigningParameters[1] = "test1";
+        signingParameters.SERVICE_REGION = "test1";
         pString = librock_awsFillAndSign(
             "request"
-            ,pSigningParameters
-            ,0
-            ,0
-            ,0
-            ,0
+            ,&signingParameters
             );
         fprintf(stderr,"I-2402 %s\n", pString ? pString : "");
-        pSigningParameters[2] = "test2";
+        signingParameters.SERVICE_NAME = "test2";
         pString = librock_awsFillAndSign(
             "request"
-            ,pSigningParameters
-            ,0
-            ,0
-            ,0
-            ,0
+            ,&signingParameters
             );
         fprintf(stderr,"I-2402 %s\n", pString ? pString : "");
-        pSigningParameters[4] = "test4";
+        signingParameters.ACCESS_KEY_ID = "test4";
         pString = librock_awsFillAndSign(
             "request"
-            ,pSigningParameters
-            ,0
-            ,0
-            ,0
-            ,0
+            ,&signingParameters
             );
         fprintf(stderr,"I-185 %s\n", pString ? pString : "");
-        pSigningParameters[5] = "test5";
+        signingParameters.SECRET_ACCESS_KEY = "test5";
+        signingParameters.fnOutput = write_to_FILE;
+        signingParameters.outputId = stdout;
+        signingParameters.fnDebugOutput = write_to_FILE;
+        signingParameters.debugOutputId = stderr;
         pString = librock_awsFillAndSign(
             "request"
-            ,pSigningParameters
-            , write_to_FILE, stdout
-            , write_to_FILE, stderr
+            ,&signingParameters
             );
         fprintf(stderr,"I-195 %s\n", pString ? pString : "");
-        pSigningParameters[0] = "test0";
+        signingParameters.SHA256 = "test0";
         pString = librock_awsFillAndSign(
             "request"
-            ,pSigningParameters
-            , write_to_FILE, stdout
-            , write_to_FILE, stderr
+            ,&signingParameters
             );
         fprintf(stderr,"I-196 %s\n", pString ? pString : "");
-        pSigningParameters[0] = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        signingParameters.SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
         pString = librock_awsFillAndSign(
             "request"
-            ,pSigningParameters
-            , write_to_FILE, stdout
-            , write_to_FILE, stderr
+            ,&signingParameters
             );
         fprintf(stderr,"I-210 %s\n", pString ? pString : "");
  

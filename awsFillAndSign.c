@@ -212,13 +212,27 @@ static void freeOnce(void **p);
 #endif
 
     /* Declare the workhorse function, which is public.  */
-    const char *librock_awsFillAndSign( //Compute an AWS Version 4 signature
-        const char *pRequestString //CURL one option per line, or HTTP headers one per line.
-        ,char const * *ppSigningParameters
-        ,int (*fnOutput)(void *outputId, const char *pSource, int count) //called to write output
-        ,void *outputId
-        ,int (*fnDebugOutput)(void *debugOutputId, const char *pSource, int count) //called to write output
-        ,void *debugOutputId
+    struct librock_awsFillAndSignParameters_s {
+        const char *ACCESS_KEY_ID; //Required
+        const char *SECRET_ACCESS_KEY; //Required
+        const char *SERVICE_NAME; //Required. This is the name for AWS Signature 4 signing.
+        const char *SHA256; //Required unless CONTENT_LENGTH is 0. *If set to 0, will be the SHA256 of an empty body.)
+        const char *SERVICE_REGION;  //Required.
+        const char *SECURITY_TOKEN; //Optional, set to 0 if not wanted
+        const char *QUERY_EXTRA; //Optional, set to 0 or URL-encoded parameter list to append to query string.
+        const char *AWS_AMZDATE;  //Required.
+        const char *AWS_REGION_NOT_USEAST1; //Optional. Will be set to region + '.' if not us-east-1, otherwise ''.
+
+        unsigned long CONTENT_LENGTH;
+        int (*fnOutput)(void *outputId, const char *pSource, int count); //called to write output
+        void *outputId;
+        int (*fnDebugOutput)(void *debugOutputId, const char *pSource, int count); //called to write output
+        void *debugOutputId;
+    };
+    
+    const char *librock_awsFillAndSign( //Compute an AWS Version 4 or Version 2 signature
+        const char *pRequestString, //CURL one option per line, or HTTP headers one per line.
+        struct librock_awsFillAndSignParameters_s *signingParameters
         );
     
     /* Declare struct for the parsed request. Callers should treat it as opaque, 
@@ -233,7 +247,8 @@ static void freeOnce(void **p);
     PRIVATE void librock_awsRequest_start_(
                         struct librock_awsRequest_s *pRequest,
                         const char *pRequestWithoutBody,
-                        const char **ppSigningParameters);
+                        struct librock_awsFillAndSignParameters_s *signingParameters
+                        );
     PRIVATE const char *librock_awsSignature_parseRequest_(
                         struct librock_awsRequest_s *pRequest);
     PRIVATE const char *librock_awsSignature_getStringToSign_(
@@ -324,7 +339,7 @@ struct librock_SHA256_CTX;
 //struct for the parsed request Callers should NOT use because it is subject to change.
  struct librock_awsRequest_s {
     const char *pRequest;
-    const char **ppSigningParameters;
+    struct librock_awsFillAndSignParameters_s *signingParameters;
     const char *pUriHost;
     const char *pUriPath;
     const char *pCanonicalQuery;
@@ -336,10 +351,6 @@ struct librock_SHA256_CTX;
     int signatureV2;
     const char *pVerb;
     int cHeaders;
-    int (*fnOutput)(void *outputId, const char *pSource, int count); //called to write output
-    void *outputId;
-    int (*fnDebugOutput)(void *debugOutputId, const char *pSource, int count); //called to write output
-    void *debugOutputId;
 };
 
 
@@ -347,59 +358,41 @@ struct librock_SHA256_CTX;
 /**************************************************************/
 /* The main workhorse function. Call this one */
 const char *librock_awsFillAndSign(
-        const char *pRequestWithoutBody //CURL one option per line, or HTTP headers one per line.
-        ,char const * *ppSigningParameters
-        ,int (*fnOutput)(void *fnOutputId, const char *pSource, int count) //called to write output
-        ,void *outputId
-        ,int (*fnDebugOutput)(void *fnDebugOutputId, const char *pSource, int count) //called to write output
-        ,void *debugOutputId
+        const char *pRequestWithoutBody, //CURL one option per line, or HTTP headers one per line.
+        struct librock_awsFillAndSignParameters_s *signingParameters
         )
 {
     struct librock_awsRequest_s awsRequest;
     const char *pErrorMessage = 0;
     char *pToSign = 0;
-#define iSHA256 0
-#define iSERVICE_REGION 1
-#define iSERVICE_NAME 2
-#define iSECURITY_TOKEN 3
-#define iACCESS_KEY_ID 4
-#define iSECRET_ACCESS_KEY 5
-#define iCONTENT_LENGTH 6
 
     if (!pRequestWithoutBody) {
         return("E-309 need request");
     }
-    if (!ppSigningParameters) {
+    if (!signingParameters) {
         return("E-316 need signingParameters.");
     }
-    if (!ppSigningParameters[iSERVICE_REGION]) { 
+    if (!signingParameters->SERVICE_REGION) { 
         return("E-316 need complete signingParameters. Missing Service Region.");
     }
-    if (!ppSigningParameters[iSERVICE_NAME]) {
+    if (!signingParameters->SERVICE_NAME) {
         return("E-316 need complete signingParameters. Missing Service Name.");
     }
-    if (!ppSigningParameters[iACCESS_KEY_ID]) { 
+    if (!signingParameters->ACCESS_KEY_ID) { 
         return("E-316 need complete signingParameters. Missing Access Key Id.");
     }
-    if (!ppSigningParameters[iSECRET_ACCESS_KEY]) {
+    if (!signingParameters->SECRET_ACCESS_KEY) {
         return("E-316 need complete signingParameters. Missing Access Key.");
     }
         
     /* Initialize the structure */
-    librock_awsRequest_start_(&awsRequest, pRequestWithoutBody, ppSigningParameters);
-    if (!strcmp(ppSigningParameters[iSERVICE_NAME],"sdb")) {
+    librock_awsRequest_start_(&awsRequest, pRequestWithoutBody, signingParameters);
+    if (!strcmp(signingParameters->SERVICE_NAME,"sdb")) {
         awsRequest.signatureV2 = 1;
     }
 
     awsRequest.pListOfHeaders = 0;
     
-    /* Initialize the output methods */
-    awsRequest.fnOutput = fnOutput;
-    awsRequest.outputId = outputId;
-
-    awsRequest.fnDebugOutput = fnDebugOutput;
-    awsRequest.debugOutputId = debugOutputId;
-
     /* Parse the request */
     pErrorMessage = librock_awsSignature_parseRequest_(&awsRequest);
     if (!pErrorMessage) {
@@ -426,7 +419,8 @@ const char *librock_awsFillAndSign(
 PRIVATE void librock_awsRequest_start_(
     struct librock_awsRequest_s *pRequest,
     const char *pRequestWithoutBody,
-    const char **ppSigningParameters)
+    struct librock_awsFillAndSignParameters_s *signingParameters
+    )
 { //Callers should use librock_awsSignatureVersion4(), not this.
     pRequest->pUriHost = 0;
     pRequest->pUriPath = 0;
@@ -438,7 +432,7 @@ PRIVATE void librock_awsRequest_start_(
     pRequest->pRequest = pRequestWithoutBody;
     pRequest->pCanonicalQuery = 0;
     pRequest->pSignedHeaders = 0;
-    pRequest->ppSigningParameters = ppSigningParameters;
+    pRequest->signingParameters = signingParameters;
     { /* prep the amzDate, in case it is not already in the request */
         time_t now;
         struct tm gmt;
@@ -461,9 +455,9 @@ PRIVATE const char *librock_awsSignature_parseRequest_(struct librock_awsRequest
         /* detected cURL --config format*/
         pRequest->bFormatCURL = 1;
 
-        if (pRequest->fnDebugOutput) {
+        if (pRequest->signingParameters->fnDebugOutput) {
             const char *pLiteral = "I-171 Detected CURL\n";
-            (*pRequest->fnDebugOutput)(pRequest->debugOutputId, pLiteral, strlen(pLiteral));
+            (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, pLiteral, strlen(pLiteral));
         }
 
     } else {
@@ -525,12 +519,12 @@ PRIVATE const char *librock_awsSignature_parseRequest_(struct librock_awsRequest
                 /* Do not sign */
             } else if (!strncasecmp(pRead, "x-amz-content-sha256:", 21)) {
                 /* Do not sign */
-                if (pRequest->ppSigningParameters[iSHA256] == (char *) 0) {
+                if (pRequest->signingParameters->SHA256 == (char *) 0) {
                     pRead += 21;
                     while(*pRead == ' ') {
                         pRead++;
                     }
-                    pRequest->ppSigningParameters[iSHA256] = pRead;
+                    pRequest->signingParameters->SHA256 = pRead;
                 }
             } else if (1/*sign everything*/) {
                 if (countToStr(pRead, ":") >= countToEol(pRead)) {
@@ -554,7 +548,7 @@ skip_line:
             }
             pRequest->cHeaders++;
         }
-        if (pRequest->ppSigningParameters[iSECURITY_TOKEN]) {
+        if (pRequest->signingParameters->SECURITY_TOKEN) {
             if (iPass == 1) {
                 pRequest->pListOfHeaders[pRequest->cHeaders] = "X-Amz-Security-Token: will_replace";
             }
@@ -571,7 +565,7 @@ skip_line:
     }
     {
         int cValid = 0;
-        const char *pRead = pRequest->ppSigningParameters[iSHA256];
+        const char *pRead = pRequest->signingParameters->SHA256;
         if (pRead == 0) {
             return "E-551 x-amz-content-sha256 not set ";
         }
@@ -617,14 +611,14 @@ PRIVATE void librock_awsSignature_dump2_(struct librock_awsRequest_s *pRequest, 
    */
     const char *pRead = pSource;
     const char *pLiteral = "#<";
-    (*pRequest->fnDebugOutput)(pRequest->debugOutputId, pLiteral, strlen(pLiteral));
-    (*pRequest->fnDebugOutput)(pRequest->debugOutputId, name, strlen(name));
+    (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, pLiteral, strlen(pLiteral));
+    (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, name, strlen(name));
     pLiteral = ">";
-    (*pRequest->fnDebugOutput)(pRequest->debugOutputId, pLiteral, strlen(pLiteral));
+    (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, pLiteral, strlen(pLiteral));
 
     while (*pRead) {
-        (*pRequest->fnDebugOutput)(pRequest->debugOutputId, pRead, countToEol(pRead));
-        (*pRequest->fnDebugOutput)(pRequest->debugOutputId, "\\n\n", 3);
+        (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, pRead, countToEol(pRead));
+        (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, "\\n\n", 3);
         pRead += countToEol(pRead);
         if (*pRead) {
             pRead++;
@@ -632,31 +626,31 @@ PRIVATE void librock_awsSignature_dump2_(struct librock_awsRequest_s *pRequest, 
     }
 
     pLiteral = "</";
-    (*pRequest->fnDebugOutput)(pRequest->debugOutputId, pLiteral, strlen(pLiteral));
-    (*pRequest->fnDebugOutput)(pRequest->debugOutputId, name, strlen(name));
+    (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, pLiteral, strlen(pLiteral));
+    (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, name, strlen(name));
     pLiteral = ">\n";
-    (*pRequest->fnDebugOutput)(pRequest->debugOutputId, pLiteral, strlen(pLiteral));
+    (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, pLiteral, strlen(pLiteral));
 
     pLiteral = "<";
-    (*pRequest->fnDebugOutput)(pRequest->debugOutputId, pLiteral, strlen(pLiteral));
-    (*pRequest->fnDebugOutput)(pRequest->debugOutputId, name, strlen(name));
+    (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, pLiteral, strlen(pLiteral));
+    (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, name, strlen(name));
     pLiteral = "Bytes>";
-    (*pRequest->fnDebugOutput)(pRequest->debugOutputId, pLiteral, strlen(pLiteral));
+    (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, pLiteral, strlen(pLiteral));
     pRead = pSource;
     while (*pRead) {
         char buffer[3];
         bToHex0(buffer, *pRead & 0xff);
-        (*pRequest->fnDebugOutput)(pRequest->debugOutputId, buffer, strlen(buffer));
+        (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, buffer, strlen(buffer));
         pRead++;
         if (*pRead) {
-            (*pRequest->fnDebugOutput)(pRequest->debugOutputId, " ", 1);
+            (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, " ", 1);
         }
     }
     pLiteral = "</";
-    (*pRequest->fnDebugOutput)(pRequest->debugOutputId, pLiteral, strlen(pLiteral));
-    (*pRequest->fnDebugOutput)(pRequest->debugOutputId, name, strlen(name));
+    (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, pLiteral, strlen(pLiteral));
+    (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, name, strlen(name));
     pLiteral = "Bytes>\n";
-    (*pRequest->fnDebugOutput)(pRequest->debugOutputId, pLiteral, strlen(pLiteral));
+    (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, pLiteral, strlen(pLiteral));
 } /* librock_awsSignature_dump2_ */
 /**************************************************************/
 
@@ -863,11 +857,11 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
 
     librock_appendableSet(&aParameter, 0, 0, 0);
     
-    if (pRequest->fnDebugOutput) {
+    if (pRequest->signingParameters->fnDebugOutput) {
         const char *pLiteral = "I-330 ";
-        (*pRequest->fnDebugOutput)(pRequest->debugOutputId, pLiteral, strlen(pLiteral));
-        (*pRequest->fnDebugOutput)(pRequest->debugOutputId, pRequest->pRequest, strlen(pRequest->pRequest));
-        (*pRequest->fnDebugOutput)(pRequest->debugOutputId, "\n", 1);
+        (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, pLiteral, strlen(pLiteral));
+        (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, pRequest->pRequest, strlen(pRequest->pRequest));
+        (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, "\n", 1);
     }
 
     /* Overallocate, ensuring room for all the headers, amzDate, payload hash.
@@ -876,9 +870,9 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
     aParameter.cb = countToEol(pRequest->pUriPath)*3 + strlen(pRequest->pRequest)*2+200+1; 
     //  This buffer is also reused to create stringToSign, which gets parts of the credentials.
     aParameter.cb += 22 + 32*2 + 1; /*room for adding x-amz-content-Sha256: */
-    aParameter.cb += strlen(pRequest->ppSigningParameters[iSERVICE_REGION]);
-    aParameter.cb += strlen(pRequest->ppSigningParameters[iSERVICE_NAME]);
-    aParameter.cb += pRequest->ppSigningParameters[iSECURITY_TOKEN] ? strlen(pRequest->ppSigningParameters[iSECURITY_TOKEN]) : 0;
+    aParameter.cb += strlen(pRequest->signingParameters->SERVICE_REGION);
+    aParameter.cb += strlen(pRequest->signingParameters->SERVICE_NAME);
+    aParameter.cb += pRequest->signingParameters->SECURITY_TOKEN ? strlen(pRequest->signingParameters->SECURITY_TOKEN) : 0;
 
     aParameter.p = (char *) malloc(aParameter.cb); 
     if (!aParameter.p) {
@@ -964,7 +958,7 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
                 }
             }
             if (!strncasecmp(pHeader, "x-amz-security-token: will_replace", 34)) {
-                pReplace = pRequest->ppSigningParameters[iSECURITY_TOKEN];
+                pReplace = pRequest->signingParameters->SECURITY_TOKEN;
             }
 
             /* lower-casify header for signing */
@@ -1092,7 +1086,7 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
     /* Hash of the Request Payload */
     pParameterList[6/*Hash of payload*/] = (char *) aParameter.p + aParameter.iWriting;
     {
-        if (!librock_safeAppend0(&aParameter, pRequest->ppSigningParameters[iSHA256], 32*2)) {
+        if (!librock_safeAppend0(&aParameter, pRequest->signingParameters->SHA256, 32*2)) {
             freeOnce((void **) & pRequest->pSignedHeaders);
             freeOnce((void **) & aParameter.p);
             return "E-470 would overflow pre-allocated block";
@@ -1139,7 +1133,7 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
             return pErrorMessage;
         }
 
-        if (pRequest->fnDebugOutput) {
+        if (pRequest->signingParameters->fnDebugOutput) {
             librock_awsSignature_dump2_(pRequest, "CanonicalRequest", pCanonicalRequest);
         }
 
@@ -1210,9 +1204,9 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
         }
         
         librock_safeAppend0(&aParameter, "/", 1);
-        librock_safeAppend0(&aParameter, pRequest->ppSigningParameters[iSERVICE_REGION], -1);
+        librock_safeAppend0(&aParameter, pRequest->signingParameters->SERVICE_REGION, -1);
         librock_safeAppend0(&aParameter, "/", 1);
-        librock_safeAppend0(&aParameter, pRequest->ppSigningParameters[iSERVICE_NAME], -1);
+        librock_safeAppend0(&aParameter, pRequest->signingParameters->SERVICE_NAME, -1);
         if (!librock_safeAppend0(&aParameter, "/aws4_request\n", -1)) {
             freeOnce((void **) & pRequest->pSignedHeaders);
             freeOnce((void **) & aParameter.p);
@@ -1233,7 +1227,7 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59
             }
         }
 
-        if (pRequest->fnDebugOutput) {
+        if (pRequest->signingParameters->fnDebugOutput) {
             librock_awsSignature_dump2_(pRequest, "StringToSign", aParameter.p);
         }
     }
@@ -1258,8 +1252,8 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
         librock_appendableSet(&a,buffer1,sizeof(buffer1),0);
         
         librock_hmacSha256(resultSha,
-                pRequest->ppSigningParameters[iSECRET_ACCESS_KEY],
-                strlen(pRequest->ppSigningParameters[iSECRET_ACCESS_KEY]),
+                pRequest->signingParameters->SECRET_ACCESS_KEY,
+                strlen(pRequest->signingParameters->SECRET_ACCESS_KEY),
                 pToSign,
                 strlen(pToSign));
                 
@@ -1267,11 +1261,11 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
 
         librock_appendableSet(&a,base64Version2,sizeof(base64Version2),0);
         librock_safeAppendUrlEncoded0(&a,buffer1,strlen(buffer1));
-        if (pRequest->fnDebugOutput) {
+        if (pRequest->signingParameters->fnDebugOutput) {
             pLiteral = "I-1256 ";
-            (*pRequest->fnDebugOutput)(pRequest->debugOutputId, pLiteral, strlen(pLiteral));
-            (*pRequest->fnDebugOutput)(pRequest->debugOutputId, base64Version2, strlen(base64Version2));
-            (*pRequest->fnDebugOutput)(pRequest->debugOutputId, "\n", 1);
+            (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, pLiteral, strlen(pLiteral));
+            (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, base64Version2, strlen(base64Version2));
+            (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, "\n", 1);
         }
         
     } else {
@@ -1286,13 +1280,13 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
                 kSigning = HMAC(kService, "aws4_request")
         */
         { /* kDate = HMAC("AWS4" + kSecret, Date) */
-            int cbBuf = strlen(pRequest->ppSigningParameters[iSECRET_ACCESS_KEY])+4;
+            int cbBuf = strlen(pRequest->signingParameters->SECRET_ACCESS_KEY)+4;
             char *pConcatKey = (char *) malloc(cbBuf+1);
             if (!pConcatKey) {
                 return "E-590 malloc failed";
             }
             memmove(pConcatKey, "AWS4", 4);
-            memmove(pConcatKey+4, pRequest->ppSigningParameters[iSECRET_ACCESS_KEY], cbBuf-4);
+            memmove(pConcatKey+4, pRequest->signingParameters->SECRET_ACCESS_KEY, cbBuf-4);
             pConcatKey[cbBuf] = '\0';
             librock_hmacSha256(resultSha,
                                 pConcatKey,
@@ -1306,28 +1300,28 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
             const char *pRead = 0;
             
             /* kRegion = HMAC(kDate, Region) */
-            pRead = pRequest->ppSigningParameters[iSERVICE_REGION];
+            pRead = pRequest->signingParameters->SERVICE_REGION;
             librock_hmacSha256(resultSha, (char *) resultSha, 32, pRead, strlen(pRead));
             pRead = strchr(pRead, '/')+1;
 
             /* kService = HMAC(kRegion, Service) */
-            pRead = pRequest->ppSigningParameters[iSERVICE_NAME];
+            pRead = pRequest->signingParameters->SERVICE_NAME;
             librock_hmacSha256(resultSha, (char *) resultSha, 32, pRead, strlen(pRead));
             
             /* kSigning = HMAC(kService, "aws4_request")*/
             librock_hmacSha256(resultSha, (char *) resultSha, 32, "aws4_request", 12);
 
             /* resultSha has the signing key */
-            if (pRequest->fnDebugOutput) {
+            if (pRequest->signingParameters->fnDebugOutput) {
                 unsigned int i;
                 pLiteral = "I-608 ";
-                (*pRequest->fnDebugOutput)(pRequest->debugOutputId, pLiteral, strlen(pLiteral));
+                (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, pLiteral, strlen(pLiteral));
                 for (i = 0; i < sizeof(resultSha); i++) {
                     char buf[3];
                     bToHex0(buf, resultSha[i] & 0xff);
-                    (*pRequest->fnDebugOutput)(pRequest->debugOutputId, buf, strlen(buf));
+                    (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, buf, strlen(buf));
                 }
-                (*pRequest->fnDebugOutput)(pRequest->debugOutputId, "\n", 1);
+                (*pRequest->signingParameters->fnDebugOutput)(pRequest->signingParameters->debugOutputId, "\n", 1);
 
             }
         }
@@ -1335,6 +1329,8 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
         /* Use the signing key which in resultSha, and write the result back to resultSha */
         librock_hmacSha256(resultSha, (char *) resultSha, 32, pToSign, strlen(pToSign));
     }
+#define emitCounted(s,c) (*(pRequest->signingParameters->fnOutput))(pRequest->signingParameters->outputId, s, c)
+#define emit(s)  (*(pRequest->signingParameters->fnOutput))(pRequest->signingParameters->outputId, s, strlen(s))
     
     /* resultSha has the signature. Output with Authorization */
     {
@@ -1357,23 +1353,23 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
                     if (pHeader[-1]=='\"') {
                         pHeader--;
                     }
-                    (*(pRequest->fnOutput))(pRequest->outputId, pStart, pHeader-pStart);
+                    emitCounted(pStart,pHeader - pStart);
                     if (isCurlOptionName(pStart, "url") && pRequest->signatureV2) {
                         didContent = 1;
                         if (!strncmp(pRequest->pVerb,"GET",countOptionName(pRequest->pVerb))) {
-                            (*(pRequest->fnOutput))(pRequest->outputId, "&Signature=", 11);
-                            (*(pRequest->fnOutput))(pRequest->outputId, base64Version2, strlen(base64Version2));
+                            emit("&Signature=");
+                            emit(base64Version2);
                         }
                     } else if (isCurlOptionName(pStart, "data") && pRequest->signatureV2) {
-                        (*(pRequest->fnOutput))(pRequest->outputId, "&Signature=", 11);
-                        (*(pRequest->fnOutput))(pRequest->outputId, base64Version2, strlen(base64Version2));
-                        pRequest->ppSigningParameters[iCONTENT_LENGTH] += 11 + strlen(base64Version2);
+                        emit("&Signature=");
+                        emit(base64Version2);
+                        pRequest->signingParameters->CONTENT_LENGTH += 11 + strlen(base64Version2);
                     }
                     if (*pHeader == '\"') {
-                        (*(pRequest->fnOutput))(pRequest->outputId, pHeader, 1);
+                        emitCounted(pHeader,1);
                         pHeader++;
                     }
-                    (*(pRequest->fnOutput))(pRequest->outputId, "\n", 1);
+                    emit("\n");
                     if (*pHeader) pHeader++;
                     continue;
                 }
@@ -1381,37 +1377,33 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
             if (!strncasecmp(pStart, "authorization:", 14)) {
                 /* Skip this now. Add it later */
             } else if (!strncasecmp(pStart, "x-amz-content-sha256:", 21)) {
-                const char *pLiteral;
                 didContent = 1;
                 if (pRequest->bFormatCURL) {
-                    pLiteral = "header = \x22x-amz-content-sha256:";
+                    emit("header = \x22x-amz-content-sha256:");
                 } else {
-                    pLiteral = "x-amz-content-sha256:";
+                    emit("x-amz-content-sha256:");
                 }
-                (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
             
-                pLiteral = pRequest->ppSigningParameters[iSHA256];
-                (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, 64);
+                emitCounted(pRequest->signingParameters->SHA256,64);
                 
                 if (pRequest->bFormatCURL) {
-                    (*(pRequest->fnOutput))(pRequest->outputId, "\x22", 1);           
+                    emit("\x22");
                 }
-                (*(pRequest->fnOutput))(pRequest->outputId, "\n", 1);
+                emit("\n");
             } else {
                 if (pRequest->bFormatCURL) {
-                    pLiteral = "header = \x22";
-                    (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
+                    emit("header = \x22");
                 }
-                (*(pRequest->fnOutput))(pRequest->outputId, pStart, pHeader-pStart);
+                emitCounted(pStart, pHeader-pStart);
                 if (pRequest->signatureV2 && pStart == pRequest->pRequest) {
                     didContent = 1;
-                    (*(pRequest->fnOutput))(pRequest->outputId, "&Signature=", 11);
-                    (*(pRequest->fnOutput))(pRequest->outputId, base64Version2, strlen(base64Version2));
+                    emit("&Signature=");
+                    emit(base64Version2);
                 }
                 if (pRequest->bFormatCURL && pHeader[-1] != '\x22') {
-                    (*(pRequest->fnOutput))(pRequest->outputId, "\x22", 1);
+                    emit("\x22");
                 }
-                (*(pRequest->fnOutput))(pRequest->outputId, "\n", 1);
+                emit("\n");
             }
             if (*pHeader) {
                 pHeader++;
@@ -1421,77 +1413,63 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
         } else {
             /* Authorization header */
             if (pRequest->bFormatCURL) {
-                pLiteral = "header = \x22";
-                (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
+                emit("header = \x22");
             }
-            pLiteral = "Authorization:";
-            (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
+            emit("Authorization:");
 
-            pLiteral = "AWS4-HMAC-SHA256 Credential=";
-            (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
-            pLiteral = pRequest->ppSigningParameters[iACCESS_KEY_ID];
-            (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
-            (*(pRequest->fnOutput))(pRequest->outputId, "/", 1);
-            (*(pRequest->fnOutput))(pRequest->outputId, pRequest->pXAmzDate, (int) (strchr(pRequest->pXAmzDate, 'T')-pRequest->pXAmzDate));
-            (*(pRequest->fnOutput))(pRequest->outputId, "/", 1);
-            pLiteral = pRequest->ppSigningParameters[iSERVICE_REGION];
-            (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
-            (*(pRequest->fnOutput))(pRequest->outputId, "/", 1);
-            pLiteral = pRequest->ppSigningParameters[iSERVICE_NAME];
-            (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
-            pLiteral = "/aws4_request";
-            (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
+            emit("AWS4-HMAC-SHA256 Credential=");
+            emit(pRequest->signingParameters->ACCESS_KEY_ID);
+            emit("/");
+            emitCounted(pRequest->pXAmzDate, (int) (strchr(pRequest->pXAmzDate, 'T')-pRequest->pXAmzDate));
+            emit("/");
+            emit(pRequest->signingParameters->SERVICE_REGION);
+            emit("/");
+            emit(pRequest->signingParameters->SERVICE_NAME);
+            emit("/aws4_request");
             
-            pLiteral = ", SignedHeaders=";
-            (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
-            (*(pRequest->fnOutput))(pRequest->outputId, pRequest->pSignedHeaders, strlen(pRequest->pSignedHeaders));
-            pLiteral = ", Signature=";
-            (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
+            emit(", SignedHeaders=");
+            emit(pRequest->pSignedHeaders);
+            emit(", Signature=");
             {
                 unsigned int i;
                 for (i = 0; i < sizeof(resultSha); i++) {
                     char buf[3];
                     bToHex0(buf, resultSha[i] & 0xff);
-                    (*(pRequest->fnOutput))(pRequest->outputId, buf, 2);
+                    emitCounted(buf,2);
                 }
 
             }
             if (pRequest->bFormatCURL) {
-                (*(pRequest->fnOutput))(pRequest->outputId, "\x22", 1);
+                emit("\x22");
             }
-            (*(pRequest->fnOutput))(pRequest->outputId, "\n", 1);
+            emit("\n");
 
-            if (pRequest->ppSigningParameters[iSECURITY_TOKEN]) {
+            if (pRequest->signingParameters->SECURITY_TOKEN) {
                 if (pRequest->bFormatCURL) {
-                    pLiteral = "header = \x22X-Amz-Security-Token:";
-                    (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
-                    pLiteral = pRequest->ppSigningParameters[iSECURITY_TOKEN];
-                    (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
-                    (*(pRequest->fnOutput))(pRequest->outputId, "\x22\n", 2);
-                } else {
-                    pLiteral = "X-Amz-Security-Token:";
-                    (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
-                    pLiteral = pRequest->ppSigningParameters[iSECURITY_TOKEN];
-                    (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
-                    (*(pRequest->fnOutput))(pRequest->outputId, "\n", 1);
+                    emit("header = \x22");
                 }
+                emit("X-Amz-Security-Token:");
+                emit(pRequest->signingParameters->SECURITY_TOKEN);
+                if (pRequest->bFormatCURL) {
+                    emit("\x22");
+                }
+                emit("\n");
             }
 
             /* write an amz-date, if needed */
             if (pRequest->amzDate[0]) {
                 if (pRequest->bFormatCURL == 1) {
-                    pLiteral = "header = \x22";
-                    (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
-                    (*(pRequest->fnOutput))(pRequest->outputId, pRequest->amzDate, strlen(pRequest->amzDate));
-                    (*(pRequest->fnOutput))(pRequest->outputId, "\x22\n", 2);
+                    emit("header = \x22");
+                    emit(pRequest->amzDate);
+                    emit("\x22");
                 } else {
-                    (*(pRequest->fnOutput))(pRequest->outputId, pRequest->amzDate, strlen(pRequest->amzDate));
-                    (*(pRequest->fnOutput))(pRequest->outputId, "\n", 1);
+                    emit(pRequest->amzDate);
                 }
+                emit("\n");
             }
         }
-        if (pRequest->ppSigningParameters[iCONTENT_LENGTH] > 0) {
-            unsigned long value = (unsigned long) (pRequest->ppSigningParameters[iCONTENT_LENGTH]);
+        if (pRequest->signingParameters->CONTENT_LENGTH > 0) {
+            unsigned long value = pRequest->signingParameters->CONTENT_LENGTH;
             char buf[40];
             int i = sizeof(buf);
             /* to string, avoiding sprintf */
@@ -1504,18 +1482,16 @@ PRIVATE const char *librock_awsSignature_outputWithAuthorization_(struct librock
             } while(value);
             
             if (pRequest->bFormatCURL) {
-                pLiteral = "header = \x22""Content-Length:";
+                emit("header = \x22""Content-Length:");
             } else {
-                pLiteral = "Content-Length:";
+                emit("Content-Length:");
             }
-            (*(pRequest->fnOutput))(pRequest->outputId, pLiteral, strlen(pLiteral));
-        
-            (*(pRequest->fnOutput))(pRequest->outputId, buf+i, strlen(buf+i));
+            emit(buf+i);
             
             if (pRequest->bFormatCURL) {
-                (*(pRequest->fnOutput))(pRequest->outputId, "\x22", 1);           
+                emit("\x22");
             }
-            (*(pRequest->fnOutput))(pRequest->outputId, "\n", 1);
+            emit("\n");
 
         }
     }
@@ -1771,6 +1747,8 @@ const char *prepareSHA256(char **ppSHA256,int scanType, unsigned long *contentLe
     if (scanType == 1) { /* process CURL options to determine body */
         /* Find an upload-file or data= field in the request. */
         const char *pRead = pFilledRequest;
+        *contentLength = 0;
+        *contentLength = 0;
         while(pRead) {
             if (isCurlOptionName(pRead, "upload-file")) {
                 char *fileName = 0;
@@ -2009,7 +1987,7 @@ int main(int argc, char **argv)
     int iEncodeParameters = 0;
     int credentialsFromEnv = 1;
     char credentials[200];
-    char *signingParameters[7];
+    struct librock_awsFillAndSignParameters_s signingParameters;
     unsigned char mdContent32[] = { /* SHA256 of empty string */
         0xe3,0xb0,0xc4,0x42,0x98,0xfc,0x1c,0x14,0x9a,0xfb,0xf4,0xc8,0x99,0x6f,0xb9,0x24,0x27,0xae,0x41,0xe4,0x64,0x9b,0x93,0x4c,0xa4,0x95,0x99,0x1b,0x78,0x52,0xb8,0x55
     };
@@ -2110,7 +2088,7 @@ int main(int argc, char **argv)
                     fprintf(stderr, "%s for file '%s'\n", pErrorMessage, pBody);
                     return 7;
                 }
-                signingParameters[iCONTENT_LENGTH] = (void *) contentLength;
+                signingParameters.CONTENT_LENGTH = contentLength;
             } else {
                 fprintf(stderr, "E-1457 Unrecognized option: %s\nTry --help.\n",argv[argumentIndex]);
                 return 8;
@@ -2161,19 +2139,24 @@ int main(int argc, char **argv)
             pErrorMessage = collectNamedParameters(&ppNamedArguments, buffer);
         }
 
+        if (!pErrorMessage) {
+            signingParameters.SHA256 = 0; //Set below
+            pName = "AWS_DEFAULT_REGION";
+            signingParameters.SERVICE_REGION = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+
+            if (!signingParameters.SERVICE_REGION) {
+                pErrorMessage = "E-2173 need complete signingParameters. Missing Service Region.";
+            }
+
+            pName = "AWS_SERVICE_NAME";
+            signingParameters.SERVICE_NAME = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+            
+            pName = "AWS_SECURITY_TOKEN";
+            signingParameters.SECURITY_TOKEN = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+        }
         if (pErrorMessage) {
             fprintf(stderr, "%s\n", pErrorMessage);
-            freeOnce((void **)&pRequestTemplate);
             errorCode = 14;
-        } else {
-
-            signingParameters[iSHA256] = 0; //Set below
-            pName = "AWS_DEFAULT_REGION";
-            signingParameters[iSERVICE_REGION] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
-            pName = "AWS_SERVICE_NAME";
-            signingParameters[iSERVICE_NAME] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
-            pName = "AWS_SECURITY_TOKEN";
-            signingParameters[iSECURITY_TOKEN] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
         }
         if (!pErrorMessage) {
             int iString;
@@ -2190,13 +2173,13 @@ int main(int argc, char **argv)
                 if (!ppNamedArguments[iString]) {
                     pErrorMessage = "E-2558 malloc failed";
                 }
-                ppNamedArguments[iString+1] = malloc(strlen(signingParameters[iSERVICE_REGION])+2);
+                ppNamedArguments[iString+1] = malloc(strlen(signingParameters.SERVICE_REGION)+2);
                 if (!ppNamedArguments[iString+1]) {
                     pErrorMessage = "E-2558 malloc failed";
                 }
                 if (!pErrorMessage) {
                     memmove(ppNamedArguments[iString], pName,strlen(pName)+1);
-                    pLiteral = signingParameters[iSERVICE_REGION];
+                    pLiteral = signingParameters.SERVICE_REGION;
                     if (strcmp(pLiteral, "us-east-1")) {
                         ppNamedArguments[iString+1][0] = '.';
                         memmove(ppNamedArguments[iString+1]+1, pLiteral,strlen(pLiteral)+1);
@@ -2215,9 +2198,9 @@ int main(int argc, char **argv)
                         "@eAWS_ACCESS_KEY_ID@,@eAWS_SECRET_ACCESS_KEY@");
                 if (!pErrorMessage) {
                     pName = "AWS_ACCESS_KEY_ID";
-                    signingParameters[iACCESS_KEY_ID] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+                    signingParameters.ACCESS_KEY_ID = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
                     pName = "AWS_SECRET_ACCESS_KEY";
-                    signingParameters[iSECRET_ACCESS_KEY] = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+                    signingParameters.SECRET_ACCESS_KEY = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
                 } else {
                     fprintf(stderr, "%s\n", pErrorMessage);
                     errorCode = 14;
@@ -2245,18 +2228,16 @@ int main(int argc, char **argv)
                     errorCode = 5;
                 } else if (strlen(credentials) >= sizeof(credentials) - 2) {
                     fprintf(stderr, "E-1167 The credentials string on stdin is too long\n");
-                    freeOnce((void **)&pRequestTemplate);
                     errorCode = 6;
                 } else if (!strchr(credentials,',')) {
                     fprintf(stderr, "E-1956 Need comma-separated credentials on stdin\n");
-                    freeOnce((void **)&pRequestTemplate);
                     errorCode = 16;
                 } else {
                     credentials[countToEol(credentials)] = '\0'; /* Remove \r or EOL */
                     *(strchr(credentials, ',')) = '\0'; /* Split string */
 
-                    signingParameters[iACCESS_KEY_ID] = credentials;
-                    signingParameters[iSECRET_ACCESS_KEY] = credentials+strlen(credentials)+1;
+                    signingParameters.ACCESS_KEY_ID = credentials;
+                    signingParameters.SECRET_ACCESS_KEY = credentials+strlen(credentials)+1;
                 }
                 
             }
@@ -2290,9 +2271,9 @@ int main(int argc, char **argv)
         const char *pErrorMessage = 0;
         if (scanSignature==0) {
             /* Template has SHA256 */
-            signingParameters[iSHA256] = (char *) 0;
+            signingParameters.SHA256 = (char *) 0;
         } else {
-            pErrorMessage = prepareSHA256(&pSHA256, scanSignature, (unsigned long *) &signingParameters[iCONTENT_LENGTH], mdContent32, pFilledRequest);
+            pErrorMessage = prepareSHA256(&pSHA256, scanSignature, (unsigned long *) &signingParameters.CONTENT_LENGTH, mdContent32, pFilledRequest);
             if (pErrorMessage) {
                 if (atoi(pErrorMessage+2)!= 1741) {
                     fprintf(stderr, "%s\nI-1734 template expanded:\n%s\n", pErrorMessage, pFilledRequest);
@@ -2301,14 +2282,16 @@ int main(int argc, char **argv)
                 }
                 errorCode = 12;
             }
-            signingParameters[iSHA256] = pSHA256;
+            signingParameters.SHA256 = pSHA256;
         }
         if (!errorCode) {
+            signingParameters.outputId = (void *) stdout;
+            signingParameters.fnOutput = write_to_FILE;
+            signingParameters.debugOutputId = (void *) stderr;
+            signingParameters.fnDebugOutput = bVerbose ? write_to_FILE : 0;
+            
             pErrorMessage = librock_awsFillAndSign(
-                               pFilledRequest
-                               , (const char **) signingParameters
-                               , write_to_FILE, stdout
-                               , bVerbose ? write_to_FILE : 0, stderr);
+                                    pFilledRequest, &signingParameters);
             if (pErrorMessage) {
                 fprintf(stderr, "%s\n", pErrorMessage);
                 errorCode = 7;
