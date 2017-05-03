@@ -1,4 +1,9 @@
-#if defined librock_WANT_ALTERNATE_BRANCHING
+#if defined(librock_WANT_BRANCH_COVERAGE)
+#include <stdio.h>
+#include <stdlib.h>
+#include "../awsFillAndSign.h"
+#include "../ulibrock/mit/appendable.h"
+
 int librock_triggerAlternateBranch(const char *name, long *pLong)
 {
     FILE *f;
@@ -74,6 +79,31 @@ time_t librock_coverage_time( time_t *arg )
     return fixed;
 }
 	
+    void librock_awsFillAndSign_coverage()
+    {
+        const char *pRead;
+        struct librock_appendable aBuffer;
+        char credentials[200];
+
+        librock_appendableSet(&aBuffer, credentials, sizeof(credentials));
+        pRead = "%44";
+        librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
+        pRead = "%AA";
+        librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
+        pRead = "%";
+        librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
+        pRead = "%Z";
+        librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
+        pRead = "%AZ";
+        librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
+        pRead = "%30%3A%2e%40%41%61%60%7D%7E%5F%2D0*.@Aa`}~_-";
+        librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
+        
+        countLWS(" \t");
+        
+    }
+
+
 int librock_coverage_main()
 {
     /* Compute hash */
@@ -82,12 +112,14 @@ int librock_coverage_main()
     unsigned char mdCanonicalRequest[32];
     int i;
     struct librock_appendable aTest;
-    librock_appendableSet(&aTest, mdCanonicalRequest, sizeof(mdCanonicalRequest), 0);
+    librock_appendableSet(&aTest, mdCanonicalRequest, sizeof(mdCanonicalRequest));
     librock_safeAppend0(&aTest,"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", 33);
 
+    #if 0
     librock_appendableSet(&aTest, 0, 200, realloc);
     librock_appendableSet(&aTest, aTest.p, 200, realloc);
     freeOnce(&aTest.p);    
+    #endif
     
     pHashInfo = malloc(librock_sha256Init(0)/*Get size */);
     if (pHashInfo) {
@@ -117,6 +149,28 @@ int librock_coverage_main()
         free(pHashInfo);
     }
     {
+        struct write_to_CURL_s s;
+        struct write_to_raw_s sr;
+        memset(&s, '\0', sizeof(s));
+        s.f = stdout;
+        write_to_CURL(&s, "---", 3);
+
+        memset(&s, '\0', sizeof(s));
+        s.f = stdout;
+        write_to_CURL(&s, "--- ---", 7);
+        write_to_CURL(&s, "\n:", 2);
+        write_to_CURL(&s, "----\n", 5);
+        write_to_CURL(&s, "----", 4);
+
+        memset(&sr, '\0', sizeof(s));
+        sr.f = stdout;
+        write_to_raw(&sr, "--- ---", 7);
+        write_to_raw(&sr, "\n:curl:---\n", 11);
+        write_to_raw(&sr, "---\n", 4);
+        write_to_raw(&sr, "----", 4);
+
+    }
+    {
         struct librock_awsFillAndSignParameters_s signingParameters;
         memset(&signingParameters, '\0', sizeof(signingParameters));
         pString = librock_awsFillAndSign(
@@ -137,25 +191,25 @@ int librock_coverage_main()
             );
         fprintf(stderr,"I-2402 %s\n", pString ? pString : "");
 
-        signingParameters.SERVICE_REGION = "test1";
+        signingParameters.AWS_DEFAULT_REGION = "test1";
         pString = librock_awsFillAndSign(
             "request"
             ,&signingParameters
             );
         fprintf(stderr,"I-2402 %s\n", pString ? pString : "");
-        signingParameters.SERVICE_NAME = "test2";
+        signingParameters.AWS_SERVICE_NAME = "test2";
         pString = librock_awsFillAndSign(
             "request"
             ,&signingParameters
             );
         fprintf(stderr,"I-2402 %s\n", pString ? pString : "");
-        signingParameters.ACCESS_KEY_ID = "test4";
+        signingParameters.AWS_ACCESS_KEY_ID = "test4";
         pString = librock_awsFillAndSign(
             "request"
             ,&signingParameters
             );
         fprintf(stderr,"I-185 %s\n", pString ? pString : "");
-        signingParameters.SECRET_ACCESS_KEY = "test5";
+        signingParameters.AWS_SECRET_ACCESS_KEY = "test5";
         signingParameters.fnOutput = write_to_FILE;
         signingParameters.outputId = stdout;
         signingParameters.fnDebugOutput = write_to_FILE;
@@ -165,13 +219,13 @@ int librock_coverage_main()
             ,&signingParameters
             );
         fprintf(stderr,"I-195 %s\n", pString ? pString : "");
-        signingParameters.SHA256 = "test0";
+        signingParameters.AWS_SHA256 = "test0";
         pString = librock_awsFillAndSign(
             "request"
             ,&signingParameters
             );
         fprintf(stderr,"I-196 %s\n", pString ? pString : "");
-        signingParameters.SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        signingParameters.AWS_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
         pString = librock_awsFillAndSign(
             "request"
             ,&signingParameters
@@ -194,14 +248,13 @@ int librock_coverage_main()
     if (1) {
         struct librock_appendable aBuffer;
         char credentials[200];
-        const char *pRead;
 
-        librock_appendableSet(&aBuffer, 0, 0, 0);
+        librock_appendableSet(&aBuffer, 0, 0);
 
         putenv("awsFILLFAULT=this is a test");
 //out20170117        librock_safeAppendEnv0(&aBuffer,"awsFILLFAULT"); /* Calculate size only */
 
-        librock_appendableSet(&aBuffer, credentials, sizeof(credentials), 0);
+        librock_appendableSet(&aBuffer, credentials, sizeof(credentials));
 
         librock_safeAppend0(&aBuffer,0,-1); //-1 length
 //out20170117        librock_safeAppendEnv0(&aBuffer,"  "); //environment variable not found
@@ -220,11 +273,8 @@ int librock_coverage_main()
 
         aBuffer.iWriting = 0;
         librock_safeAppendUrlEncoded0(&aBuffer,"%",-1); //-1 length
-        needEncoding("%");
-        needEncoding("%0");
-        needEncoding("%00");
         {/* Trigger code branches librock_safeAppendBase64Encoded0 */
-            librock_appendableSet(&aBuffer, credentials, sizeof(credentials), 0);
+            librock_appendableSet(&aBuffer, credentials, sizeof(credentials));
             aBuffer.iWriting = aBuffer.cb-2; // Set position near end
             librock_safeAppendBase64Encoded0(&aBuffer,(const unsigned char *)"FILL",4);
             librock_safeAppendBase64Encoded0(&aBuffer,(const unsigned char *)"FILL",-1);
@@ -232,30 +282,15 @@ int librock_coverage_main()
             aBuffer.iWriting = aBuffer.cb-2; // Set position near end
             librock_safeAppendBase64Encoded0(&aBuffer,(const unsigned char *)"",0);
 
-            librock_appendableSet(&aBuffer, 0, 0, 0);
+            librock_appendableSet(&aBuffer, 0, 0);
             librock_safeAppendBase64Encoded0(&aBuffer,(const unsigned char *)"FILL",4);
             
         }
-        {
-            librock_appendableSet(&aBuffer, credentials, sizeof(credentials), 0);
-            pRead = "%44";
-            librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
-            pRead = "%AA";
-            librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
-            pRead = "%";
-            librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
-            pRead = "%Z";
-            librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
-            pRead = "%AZ";
-            librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
-            pRead = "%30%3A%2e%40%41%61%60%7D%7E%5F%2D0*.@Aa`}~_-";
-            librock_awsSignature_canonicalQueryString_(0,&aBuffer, &pRead, 0);
-        }
+        librock_awsFillAndSign_coverage();
     }
     fprintf(stderr,"I-253\n");
     countToEol("\r");
     countToValue("");
-    countLWS(" \t");
     fprintf(stderr,"I-257\n");
     time(0);
     return 0;

@@ -774,7 +774,7 @@ int main(int argc, char **argv)
 
 #if defined librock_WANT_BRANCH_COVERAGE
     argumentIndex = 1;
-    fprintf(stderr,"I-1474 %s(COVERAGE TEST)", argv[0]);
+    fprintf(stderr,"I-1474 %s(COVERAGE TEST)", "[[awsFillAndSign]]");
     while(argumentIndex < argc) {
         fprintf(stderr, " %s", argv[argumentIndex]);
         if (!strncmp(argv[argumentIndex],"-Dtest=",7)) {

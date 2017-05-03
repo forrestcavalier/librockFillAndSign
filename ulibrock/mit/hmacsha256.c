@@ -112,7 +112,7 @@ void librock_hmacSha256(unsigned char *digest,const char *key,int cbKey,const ch
     librock_sha256Update(pContext,(const unsigned char *)keyBuffer,sizeof(keyBuffer));
     librock_sha256Update(pContext,(const unsigned char *)digest,32); /* SHA256 */
     librock_sha256StoreFinal((unsigned char *)digest,pContext);
-	free(pContext);
+//	free(pContext);
 
 } /* librock_hmacSha256 */
 

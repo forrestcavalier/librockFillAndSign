@@ -22,40 +22,40 @@
 //AWS Services supporting Signature Version 4:
 
 //API Gateway
-#include "aws-curl-templates/aws_apigateway_templates.inc"
+#include "aws-templates/aws_apigateway_templates.inc"
 
 //EC2
-#include "aws-curl-templates/aws_ec2_ami_templates.inc"
-#include "aws-curl-templates/aws_ec2_ebs_templates.inc"
-#include "aws-curl-templates/aws_ec2_hosts_templates.inc"
-#include "aws-curl-templates/aws_ec2_net_templates.inc"
-#include "aws-curl-templates/aws_ec2_reserved_templates.inc"
-#include "aws-curl-templates/aws_ec2_scheduled_templates.inc"
-#include "aws-curl-templates/aws_ec2_spot_templates.inc"
-#include "aws-curl-templates/aws_ec2_vm_templates.inc"
-#include "aws-curl-templates/aws_ec2_vpc_templates.inc"
-#include "aws-curl-templates/aws_ec2_templates.inc"
+#include "aws-templates/aws_ec2_ami_templates.inc"
+#include "aws-templates/aws_ec2_ebs_templates.inc"
+#include "aws-templates/aws_ec2_hosts_templates.inc"
+#include "aws-templates/aws_ec2_net_templates.inc"
+#include "aws-templates/aws_ec2_reserved_templates.inc"
+#include "aws-templates/aws_ec2_scheduled_templates.inc"
+#include "aws-templates/aws_ec2_spot_templates.inc"
+#include "aws-templates/aws_ec2_vm_templates.inc"
+#include "aws-templates/aws_ec2_vpc_templates.inc"
+#include "aws-templates/aws_ec2_templates.inc"
 
 //S3
-#include "aws-curl-templates/aws_s3_templates.inc"
+#include "aws-templates/aws_s3_templates.inc"
 
 //Mobile Analytics
-#include "aws-curl-templates/aws_mobileanalytics_templates.inc"
+#include "aws-templates/aws_mobileanalytics_templates.inc"
 
 //AWS IoT
-#include "aws-curl-templates/aws_iot_templates.inc"
+#include "aws-templates/aws_iot_templates.inc"
 
 //Amazon Relational Database Service 
-#include "aws-curl-templates/aws_rds_templates.inc"
+#include "aws-templates/aws_rds_templates.inc"
 
 //IAM
-#include "aws-curl-templates/aws_iam_templates.inc"
+#include "aws-templates/aws_iam_templates.inc"
 
 //Amazon Simple Queue Service 
-#include "aws-curl-templates/aws_sqs_templates.inc"
+#include "aws-templates/aws_sqs_templates.inc"
 
 //Amazon Simple Notification Service
-#include "aws-curl-templates/aws_sns_templates.inc"
+#include "aws-templates/aws_sns_templates.inc"
 
 //SimpleDB
-#include "aws-curl-templates/aws_simpledb_templates.inc"
+#include "aws-templates/aws_simpledb_templates.inc"

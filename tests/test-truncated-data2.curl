@@ -9,6 +9,7 @@
 @// (Use awsFillAndSign by MIB SOFTWARE to fill the template, strip comments,
 @// and add AWS Signatures before using CURL. IMPORTANT: use the -bs command
 @// line flag to compute the SHA256 signature of the POST data.)
+@//.default.AWS_SERVICE_NAME=ec2
 request = "POST"
 url="https://ec2.amazonaws.com/"
 header= "host:ec2.amazonaws.com"

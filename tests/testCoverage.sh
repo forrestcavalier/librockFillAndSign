@@ -7,27 +7,27 @@ export AWS_ACCESS_KEY_ID=
 export AWS_SECRET_ACCESS_KEY=
 export AWS_SECURITY_TOKEN=
 
-./awsFillAndSign -Dtest=9 --verbose aws-s3-list.curl bucketname prefix 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=9 --verbose --curl aws-s3-list bucketname prefix 2>>tests/$FIFILE
 export AWS_DEFAULT_REGION=us-east-1
-./awsFillAndSign -Dtest=11 --verbose aws-s3-list.curl bucketname prefix 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=11 --verbose --curl aws-s3-list bucketname prefix 2>>tests/$FIFILE
 export AWS_ACCESS_KEY_ID=AAAAAAAAAAAAAAAAAAAA
-./awsFillAndSign -Dtest=13 --verbose aws-s3-list.curl bucketname prefix 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=13 --verbose --curl aws-s3-list bucketname prefix 2>>tests/$FIFILE
 export AWS_SECRET_ACCESS_KEY=7666666666666666666666666666666666666666
-./awsFillAndSign -Dtest=15 --verbose aws-s3-list.curl bucketname prefix 2>>tests/$FIFILE
-./awsFillAndSign -Dtest=17b --verbose aws-s3-list.curl bucketname prefix 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=15 --verbose --curl aws-s3-list bucketname prefix 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=17b --verbose --curl aws-s3-list bucketname prefix 2>>tests/$FIFILE
 export AWS_SECURITY_TOKEN=test_example_security_token
-./awsFillAndSign -Dtest=17 --verbose aws-s3-list.curl bucketname prefix 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=17 --verbose --curl aws-s3-list bucketname prefix 2>>tests/$FIFILE
 
 ./awsFillAndSign -Dtest=19 --list 2>>tests/$FIFILE
-./awsFillAndSign -Dtest=19b --list aws-s3-get.curl 2>>tests/$FIFILE
-./awsFillAndSign -Dtest=19c --list aws-s3-get.curl extra 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=19b --list aws-s3-get 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=19c --list aws-s3-get extra 2>>tests/$FIFILE
 
-./awsFillAndSign -Dtest=21 --list aws-ec2-describe-instances.curl >tests/awsFillAndSignTest.txt 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=21 --list aws-ec2-describe-instances >tests/awsFillAndSignTest.txt 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=22 -b tests/awsFillAndSignTest.txt --from-file tests/awsFillAndSignTest.txt 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=23 --list FileDoesNotExist 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=24 --help 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=25 --coverage 2>>tests/$FIFILE
-./awsFillAndSign -Dtest=26 --verbose aws-simpledb-list-domains.curl 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=26 --verbose --curl aws-simpledb-list-domains 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=26b --verbose --from-file tests/test-curl-badv2.curl 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=26c --verbose --from-file tests/test-curl-badv2b.curl 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=26d --verbose --from-file tests/test-curl-v2.curl 2>>tests/$FIFILE
@@ -35,26 +35,35 @@ export AWS_SECURITY_TOKEN=test_example_security_token
 
 echo "" | ./awsFillAndSign -Dtest=27 --read-key - --help 2>>tests/$FIFILE
 echo "" | ./awsFillAndSign -Dtest=28 --read-key --from-file FileDoesNotExist 2>>tests/$FIFILE
-./awsFillAndSign -Dtest=29 --list bad-template.curl 2>>tests/$FIFILE
-./awsFillAndSign -Dtest=29b -DAWS_SERVICE_NAME=bad bad-template.curl 2>>tests/$FIFILE
-./awsFillAndSign -Dtest=29c --list bad-template2.curl 2>>tests/$FIFILE
-./awsFillAndSign -Dtest=29d bad-template3.curl 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=29 --list bad-template 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=29b -DAWS_SERVICE_NAME=bad bad-template 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=29c --list bad-template2 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=29d bad-template3 2>>tests/$FIFILE
 
-echo "x/x,y,zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz" | ./awsFillAndSign -Dtest=30 --read-key aws-s3-list.curl bucketname prefix 2>>tests/$FIFILE
-./awsFillAndSign -Dtest=31 --verbose aws-s3-list.curl bucketname prefix 2>>tests/$FIFILE
+echo "x/x,y,zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz" | ./awsFillAndSign -Dtest=30 --read-key aws-s3-list bucketname prefix 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=31 --verbose --curl aws-s3-list bucketname prefix 2>>tests/$FIFILE
 
 # Upload file
-./awsFillAndSign -Dtest=34 -bFileDoesNotExist aws-s3-put.curl bucket tests/awsFillAndSignTest.txt tests/test.txt 2>>tests/$FIFILE
-./awsFillAndSign -Dtest=35 -b tests/awsFillAndSignTest.txt aws-s3-put.curl bucket tests/awsFillAndSignTest.txt tests/test.txt 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=34 -bFileDoesNotExist --curl aws-s3-put bucket tests/awsFillAndSignTest.txt tests/test.txt 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=35 -b tests/awsFillAndSignTest.txt --curl aws-s3-put bucket tests/awsFillAndSignTest.txt tests/test.txt 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=35b --curl aws-s3-put bucket tests/doesnotexist.txt tests/test.txt 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=36 --have-sha256 -DCLParam=test --from-file tests/test-raw.txt @param1 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=37 aws-s3-put.curl bucket tests/awsFillAndSignTest.txt tests/test.txt 2>>tests/$FIFILE
 ./awsFillAndSign -Dtest=38 aws-s3-list.curl bucket tests/awsFillAndSignTest.txt tests/test.txt 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=39a aws-s3-PUT-test.curl bucket tests/awsFillAndSignTest.txt tests/test.txt 2>>tests/$FIFILE
+./awsFillAndSign -Dtest=39b aws-s3-GET-test.curl bucket tests/awsFillAndSignTest.txt tests/test.txt 2>>tests/$FIFILE
+
+#signature v2
+./awsFillAndSign -Dtest=40a aws-v2-PUT-test.curl bucket err object
+./awsFillAndSign -Dtest=40b aws-v2-PUT-test expr
+./awsFillAndSign -Dtest=40c aws-v2-PUT-test2 expr
+./awsFillAndSign -Dtest=40d aws-v2-PUT-test3 expr
 
 # unexpected formats of credential scope
-echo '""' | ./awsFillAndSign -Dtest=41 --read-key aws-s3-list.curl bucketname prefix 2>>tests/$FIFILE
-echo x | ./awsFillAndSign -Dtest=42 --read-key aws-s3-list.curl bucketname prefix 2>>tests/$FIFILE
-echo x/ | ./awsFillAndSign -Dtest=42b --read-key aws-s3-list.curl bucketname prefix 2>>tests/$FIFILE
-echo x, | ./awsFillAndSign -Dtest=43 --read-key aws-s3-list.curl bucketname prefix 2>>tests/$FIFILE
+echo '""' | ./awsFillAndSign -Dtest=41 --read-key --curl aws-s3-list bucketname prefix 2>>tests/$FIFILE
+echo x | ./awsFillAndSign -Dtest=42 --read-key --curl aws-s3-list bucketname prefix 2>>tests/$FIFILE
+echo x/ | ./awsFillAndSign -Dtest=42b --read-key --curl aws-s3-list bucketname prefix 2>>tests/$FIFILE
+echo x, | ./awsFillAndSign -Dtest=43 --read-key --curl aws-s3-list bucketname prefix 2>>tests/$FIFILE
 echo x,y,z | ./awsFillAndSign -Dtest=44 --read-key -DCLParam=%%test --from-file tests/test-raw.txt param1 2>>tests/$FIFILE
 echo x,zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz | ./awsFillAndSign -Dtest=44b --read-key -DCLParam=%%test --from-file tests/test-raw.txt param1 2>>tests/$FIFILE
 
@@ -123,7 +132,6 @@ while [ -f librock_armAlternateBranch.txt ]
   done
 if [ "$SHOW_SA2" = "true" ]; then echo SHOWING tests/$FIFILE ; cat tests/$FIFILE; fi
 
-# upload file with failed malloc
 echo 'librock_safeAppend0 1' >librock_armAlternateBranch.txt
 export FIFILE=coverageSA0three.err
 rm tests/$FIFILE
@@ -131,7 +139,7 @@ while [ -f librock_armAlternateBranch.txt ]
 do
     cat librock_armAlternateBranch.txt
     cat librock_armAlternateBranch.txt 2>>tests/$FIFILE
-    ./awsFillAndSign --verbose aws-s3-put.curl bucket tests/awsFillAndSignTest.txt test.txt 2>>tests/$FIFILE
+    ./awsFillAndSign --verbose --curl aws-s3-put bucket tests/awsFillAndSignTest.txt test.txt 2>>tests/$FIFILE
   done
 if [ "$SHOW_SA3" = "true" ]; then echo SHOWING tests/$FIFILE ; cat tests/$FIFILE; fi
 
@@ -144,7 +152,7 @@ while [ -f librock_armAlternateBranch.txt ]
 do
     cat librock_armAlternateBranch.txt
     cat librock_armAlternateBranch.txt 2>>tests/$FIFILE
-    ./awsFillAndSign --verbose aws-ec2-describe-instances.curl 2>>tests/$FIFILE
+    ./awsFillAndSign --verbose --from-file tests/test-truncated-data2.curl 2>>tests/$FIFILE
   done
 if [ "$SHOW_MALLOC" = "true" ]; then echo SHOWING tests/$FIFILE ; cat tests/$FIFILE; fi
 
@@ -155,7 +163,7 @@ while [ -f librock_armAlternateBranch.txt ]
 do
     cat librock_armAlternateBranch.txt
     cat librock_armAlternateBranch.txt 2>>tests/$FIFILE
-    echo y,z | ./awsFillAndSign --read-key --verbose -DCLParam=%%test --from-file tests/test-raw2.txt param1@ 2>>tests/$FIFILE
+    echo y,z | ./awsFillAndSign --read-key --verbose -b tests/test-raw2.txt -DCLParam=%%test --from-file tests/test-raw2.txt param1@ 2>>tests/$FIFILE
   done
 if [ "$SHOW_MALLOC2" = "true" ]; then echo SHOWING tests/$FIFILE ; cat tests/$FIFILE; fi
 
@@ -167,7 +175,7 @@ while [ -f librock_armAlternateBranch.txt ]
 do
     cat librock_armAlternateBranch.txt
     cat librock_armAlternateBranch.txt 2>>tests/$FIFILE
-    ./awsFillAndSign --verbose aws-s3-put.curl bucket tests/awsFillAndSignTest.txt test.txt 2>>tests/$FIFILE
+    ./awsFillAndSign --verbose --curl aws-s3-put bucket tests/awsFillAndSignTest.txt test.txt 2>>tests/$FIFILE
   done
 if [ "$SHOW_MALLOC3" = "true" ]; then echo SHOWING tests/$FIFILE ; cat tests/$FIFILE; fi
 
@@ -192,7 +200,7 @@ while [ -f librock_armAlternateBranch.txt ]
 do
     cat librock_armAlternateBranch.txt
     cat librock_armAlternateBranch.txt 2>>tests/$FIFILE
-    ./awsFillAndSign --verbose aws-simpledb-list-domains.curl 2>>tests/$FIFILE
+    ./awsFillAndSign --verbose --curl aws-simpledb-list-domains 2>>tests/$FIFILE
   done
 if [ "$SHOW_MALLOC5" = "true" ]; then echo SHOWING tests/$FIFILE ; cat tests/$FIFILE; fi
 
@@ -203,7 +211,7 @@ while [ -f librock_armAlternateBranch.txt ]
 do
     cat librock_armAlternateBranch.txt
     cat librock_armAlternateBranch.txt 2>>tests/$FIFILE
-    ./awsFillAndSign --verbose aws-ec2-describe-instances.curl 2>>tests/$FIFILE
+    ./awsFillAndSign --verbose --curl aws-ec2-describe-instances 2>>tests/$FIFILE
   done
 if [ "$SHOW_GLOBAL" = "true" ]; then echo SHOWING tests/$FIFILE ; cat tests/$FIFILE; fi
 
