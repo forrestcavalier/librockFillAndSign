@@ -4,9 +4,9 @@ Fill a CURL config file template with AWS  signature version 4. Cross-platform C
 
  PURPOSE:   Sign Amazon Web Services requests with AWS Signature Version 4.
 
- LICENSE:   MIT (Free/OpenSource)
+ LICENSE:   MIT (Free/OpenSource, NO WARRANTY)
 
- STABLITY:  UNSTABLE as of 2017-01-17
+ STABLITY:  UNSTABLE as of 2017-05-02
             <br>Check for updates at: https://github.com/forrestcavalier/awsFillAndSign
             <br>Travis-CI status: [![Build Status](https://travis-ci.org/forrestcavalier/awsFillAndSign.svg?branch=master)](https://travis-ci.org/forrestcavalier/awsFillAndSign)
             <br>CodeCov status: [![codecov](https://codecov.io/gh/forrestcavalier/awsFillAndSign/branch/master/graph/badge.svg)](https://codecov.io/gh/forrestcavalier/awsFillAndSign)
@@ -17,7 +17,7 @@ Fill a CURL config file template with AWS  signature version 4. Cross-platform C
 ```
 awsFillAndSign Copyright 2016-2017 MIB SOFTWARE, INC.
 
- USAGE: awsFillAndSign [OPTIONS] <template-name.curl> [param1[ param2...]]
+ USAGE: awsFillAndSign [OPTIONS] <template-name> [param1[ param2...]]
 
    The output is the filled template with AWS Version 4 signatures.
    Credentials come from the environment variables AWS_ACCESS_KEY_ID
@@ -28,6 +28,8 @@ awsFillAndSign Copyright 2016-2017 MIB SOFTWARE, INC.
  OPTIONS:
   --from-file      Treat the template-name as a file, not a built-in template.
                    (Use --list to see built-in templates.)
+
+  --curl           Output in CURL config format.
 
   --have-sha256    The template has a SHA256 body signature.
 
@@ -57,31 +59,28 @@ awsFillAndSign Copyright 2016-2017 MIB SOFTWARE, INC.
 #Understanding Templates
 Templates are small text files which mark replaceable parameters surrounded by '@'.  The purpose of awsFillAndSign is to strip comments, replace the parameters, sign the request, and write the output so that CURL can run it.
 
-If you run awsFillAndSign --list aws-s3-put.curl you will see an example: the built-in template for AWS S3 PUT Object (for file uploads):
+If you run awsFillAndSign --list aws-s3-put you will see an example: the built-in template for AWS S3 PUT Object (for file uploads):
 
 ```
-@//aws-s3-put.curl
+@//aws-s3-put
 @// TEMPLATE FOR:  AWS S3 PUT Object
 @// REST API DOCS: http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPUT.html
 @//
-@// TEMPLATE REVISION:    2016-11-26 by MIB SOFTWARE, INC.
-@// TEMPLATE LICENSE:     MIT (Free/Open Source)
+@// TEMPLATE REVISION:    2017-04-18 by MIB SOFTWARE INC
+@// TEMPLATE LICENSE:     MIT (Free/Open source, No Warranty)
 @// TEMPLATE PARAMETERS:
-@//   @1_bucket@     - The URI-encoded bucket name
+@//   @1_bucket@     - The bucket name
 @//   @2_filename@   - The local file name. This goes into the upload-file
 @//   	                CURL parameter.
-@//   @3_objectname@ - The URI-encoded S3 object name.
+@//   @3_objectname@ - The S3 object name.
 @//
-@// (Use awsFillAndSign by MIB SOFTWARE to fill the template, strip comments,
-@// and add AWS Signatures before using CURL. IMPORTANT: use the -bs command
-@// line flag to compute the SHA256 signature of the upload-file.)
+@// (Before using CURL, use awsFillAndSign by MIB SOFTWARE to fill the
+@// template, strip comments, and add headers for AWS Signature version 4.)
 @//
 @//.default.AWS_SERVICE_NAME=s3
-url="https://@1_bucket@.s3.amazonaws.com/@3_objectname@"
-upload-file = "@p2_filename@"
-header = "Host: @1_bucket@.s3.amazonaws.com"
-header = "Authorization: AWS4-HMAC-SHA256 Credential=...,SignedHeaders=...,Signature=... (all will be replaced)"
-header = "x-amz-content-sha256:will be replaced"
+PUT https://@1_bucket@.s3.amazonaws.com/@3_objectname@ HTTP/1.1
+:curl:upload-file="@p2_filename@"
+Host: @1_bucket@.s3.amazonaws.com
 ```
 
 This template specifies three parameters. These are in the template text surrounded by '@'.
