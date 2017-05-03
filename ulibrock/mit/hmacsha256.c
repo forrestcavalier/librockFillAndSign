@@ -70,9 +70,11 @@ void librock_hmacSha256(unsigned char *digest,const char *key,int cbKey,const ch
 {
     char keyBuffer[64];
     char padBuffer[64];
+    char context[13*8+64]; /* includes extra room */
     unsigned int i = 0;
 
-    void *pContext = malloc(librock_sha256Init(0));
+//    void *pContext = malloc(librock_sha256Init(0));
+    void *pContext = &context[0]; /* avoid malloc, so we never have an error to return */
     librock_sha256Init(pContext);
 
     memset(keyBuffer,'\0',sizeof(keyBuffer));

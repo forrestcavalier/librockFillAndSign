@@ -238,7 +238,7 @@ int librock_sha256Update(struct librock_SHA256_CTX *c, const void *data_, int le
                 c->data_length_digits_[j] &= 65535u;
             } else {
                 carry = 0;
-#if defined librock_WANT_ALTERNATE_BRANCHING
+#if defined librock_WANT_BRANCH_COVERAGE
 #else
                 break;
 #endif
