@@ -34,8 +34,22 @@ Windows, and GCC on Linux and *BSD:
 */
 
 #if defined LIBROCK_WANT_INCLUDE_PTHREAD
-//gmtime_r is a compatibility macro in pthread.h
+//gmtime_r is a compatibility macro in pthread.h for CodeBlocks MinGW
 #   include <pthread.h>
+#	if defined(PTW32_VERSION)&& !defined(gmtime_r)
+//Saw this in MingW 2012 for CodeBlocks.
+//Here is the back-ported macro from later Codeblocks. Be sure
+// to have -lpthread on the gcc command line.
+#		define gmtime_r(_Time,_Tm)	({ struct tm *___tmp_tm;		\
+						pthread_testcancel();	\
+						___tmp_tm = gmtime((_Time)); \
+						if (___tmp_tm) {	\
+						  *(_Tm) = *___tmp_tm;	\
+						  ___tmp_tm = (_Tm);	\
+						}			\
+						___tmp_tm;	})
+
+#	endif
 #endif
 
 
