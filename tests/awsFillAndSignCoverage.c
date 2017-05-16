@@ -149,7 +149,7 @@ int librock_coverage_main()
         free(pHashInfo);
     }
     {
-        struct write_to_CURL_s s;
+        struct write_to_CURL_or_wget_s s;
         struct write_to_raw_s sr;
         memset(&s, '\0', sizeof(s));
         s.f = stdout;
@@ -161,6 +161,20 @@ int librock_coverage_main()
         write_to_CURL(&s, "\n:", 2);
         write_to_CURL(&s, "----\n", 5);
         write_to_CURL(&s, "----", 4);
+
+        memset(&s, '\0', sizeof(s));
+        s.f = stdout;
+        write_to_wget(&s, "---", 3);
+
+        memset(&s, '\0', sizeof(s));
+        s.f = stdout;
+        write_to_wget(&s, "--- ---", 7);
+        write_to_wget(&s, "\n:", 2);
+        write_to_wget(&s, "----\n", 5);
+        write_to_wget(&s, "----", 4);
+        write_to_wget(&s, "\n:curl:test", 11);
+        write_to_wget(&s, "test\nrest", 9);
+        write_to_wget(&s, 0, 0);
 
         memset(&sr, '\0', sizeof(s));
         sr.f = stdout;

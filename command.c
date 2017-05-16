@@ -1,5 +1,5 @@
 /* awsFillAndSign/command.c Copyright 2017 MIB SOFTWARE, INC.
-   Licensed under the terms of the MIT License (Free/OpenSource, No Warranty)
+   Licensed under the terms of the MIT License (Free/OpenSource, NO WARRANTY)
    (See the LICENSE file in the source.)
    
  PURPOSE:   Create and Sign AWS API requests from the command line without
@@ -111,7 +111,7 @@ const char *librock_awsBuiltInTemplates[] = {
     "\n""@// TEMPLATE PARAMETERS:  None"
     "\n""@"
 
-,"@//aws-simpledb-GET-test;2017-04-20;MIB SOFTWARE, INC;MIT (Free/Open source, No Warranty)"
+,"@//aws-simpledb-GET-test;2017-04-20;MIB SOFTWARE, INC;MIT (Free/Open source, NO WARRANTY)"
     "\n""@// TEMPLATE FOR:  AWS SimpleDB"
     "\n""@//   @1_SelectExpression@"
     "\n""@//.default.AWS_SERVICE_NAME=sdb"
@@ -119,7 +119,7 @@ const char *librock_awsBuiltInTemplates[] = {
     "&Action=Select"
     "&SelectExpression=@1_SelectExpression@\""
 
-,"@//aws-v2-PUT-test.curl;2017-04-20;MIB SOFTWARE, INC;MIT (Free/Open source, No Warranty)"
+,"@//aws-v2-PUT-test.curl;2017-04-20;MIB SOFTWARE, INC;MIT (Free/Open source, NO WARRANTY)"
     "\n""@// TEMPLATE FOR:  AWS SimpleDB"
     "\n""@//   @1_SelectExpression@"
     "\n""@//.default.AWS_SERVICE_NAME=sdb"
@@ -128,7 +128,7 @@ const char *librock_awsBuiltInTemplates[] = {
     "&Action=Select"
     "&SelectExpression=@1_SelectExpression@\""
 
-,"@//aws-v2-PUT-test;2017-04-20;MIB SOFTWARE, INC;MIT (Free/Open source, No Warranty)"
+,"@//aws-v2-PUT-test;2017-04-20;MIB SOFTWARE, INC;MIT (Free/Open source, NO WARRANTY)"
     "\n""@// TEMPLATE FOR:  AWS SimpleDB"
     "\n""@//   @1_SelectExpression@"
     "\n""@//.default.AWS_SERVICE_NAME=sdb"
@@ -137,7 +137,7 @@ const char *librock_awsBuiltInTemplates[] = {
     "&SelectExpression=@1_SelectExpression@ HTTP/1.1"
     "\n""Host:sdb@eAWS_REGION_NOT_USEAST1@.amazonaws.com"
     "\n\nStuff"
-,"@//aws-v2-PUT-test2;2017-04-20;MIB SOFTWARE, INC;MIT (Free/Open source, No Warranty)"
+,"@//aws-v2-PUT-test2;2017-04-20;MIB SOFTWARE, INC;MIT (Free/Open source, NO WARRANTY)"
     "\n""@// TEMPLATE FOR:  AWS SimpleDB"
     "\n""@//   @1_SelectExpression@"
     "\n""@//.default.AWS_SERVICE_NAME=sdb"
@@ -146,7 +146,7 @@ const char *librock_awsBuiltInTemplates[] = {
     "&SelectExpression=@1_SelectExpression@"
     "\n""Host:sdb@eAWS_REGION_NOT_USEAST1@.amazonaws.com"
     "\n\nStuff"
-,"@//aws-v2-PUT-test3;2017-04-20;MIB SOFTWARE, INC;MIT (Free/Open source, No Warranty)"
+,"@//aws-v2-PUT-test3;2017-04-20;MIB SOFTWARE, INC;MIT (Free/Open source, NO WARRANTY)"
     "\n""@// TEMPLATE FOR:  AWS SimpleDB"
     "\n""@//   @1_SelectExpression@"
     "\n""@//.default.AWS_SERVICE_NAME=sdb"
@@ -156,13 +156,13 @@ const char *librock_awsBuiltInTemplates[] = {
     "\n""Host:sdb@eAWS_REGION_NOT_USEAST1@.amazonaws.com"
     "\n\nStuff HTTP/1.1"
 
-,"@//aws-s3-GET-test.curl;2017-04-20;MIB SOFTWARE, INC;MIT (Free/Open source, No Warranty)"
+,"@//aws-s3-GET-test.curl;2017-04-20;MIB SOFTWARE, INC;MIT (Free/Open source, NO WARRANTY)"
    "\n""@//.default.AWS_SERVICE_NAME=s3"
    "\n""request=\"GET\""
    "\n""url=\"https://@1_bucket@.s3.amazonaws.com/@p3_objectname@\""
    "\n""header = \"Host: @1_bucket@.s3.amazonaws.com\""
 
-,"@//aws-s3-PUT-test.curl;2017-04-20;MIB SOFTWARE, INC;MIT (Free/Open source, No Warranty)"
+,"@//aws-s3-PUT-test.curl;2017-04-20;MIB SOFTWARE, INC;MIT (Free/Open source, NO WARRANTY)"
    "\n""@//.default.AWS_SERVICE_NAME=s3"
    "\n""upload-file=\"@p2_filename@\""
    "\n""url=\"https://@1_bucket@.s3.amazonaws.com/@p3_objectname@\""
@@ -189,7 +189,7 @@ const char *librock_awsBuiltInTemplate(const char *pName)
     return 0;
 }
 
-struct write_to_CURL_s {
+struct write_to_CURL_or_wget_s {
     FILE *f;
     int cTotalWritten;
     int atEOL;
@@ -197,10 +197,97 @@ struct write_to_CURL_s {
     int body;
 };
 
+PRIVATE int write_to_wget(void *id, const char *pRead, int len)
+{ /* Helper function */
+int cWritten = 0;
+struct write_to_CURL_or_wget_s *s = (struct write_to_CURL_or_wget_s *) id;
+    if (s->cTotalWritten == 0) {
+        const char *pRest = memchr(pRead,' ',len);
+        if (!pRest) {
+            pRest = pRead + strlen(pRead);
+        }
+        cWritten += fwrite("wget -O - --method=",1,19,s->f);
+        cWritten += fwrite(pRead,1,pRest - pRead,s->f);
+//        cWritten += fwrite("\n",1,1,s->f);
+        if (*pRest) {
+            pRest++;
+        }
+        len -= pRest - pRead;
+        pRead = pRest;
+        pRest = memchr(pRead,' ',len);
+        if (!pRest) {
+            pRest = pRead + len;
+        }
+        cWritten += fwrite(" \x22",1,2,s->f);
+        cWritten += fwrite(pRead,1,pRest - pRead,s->f);
+        s->needclose = 1;
+        len = 0;
+    } else if (pRead == 0) {
+        if (s->needclose) {
+            cWritten += fwrite("\x22",1,1,s->f);
+        }
+    } else {
+        while(len > 0) {
+            const char *pRest = memchr(pRead,'\n',len);
+            if (pRest == pRead) {
+                pRest++;
+                if (s->needclose) {
+                    cWritten += fwrite("\x22",1,1,s->f);
+                    s->needclose = 0;
+                }
+                if (s->atEOL) {
+                    s->body = 1;
+                    pRead++;
+                    len--;
+                }
+                s->atEOL = 1;
+            } else {
+                if (!pRest) {
+                    pRest = pRead + len;
+                }
+                if (s->atEOL == -1) {
+                    /* Ignore rest of line */
+                    len -= pRest - pRead;
+                    pRead = pRest;
+                } else if (s->atEOL) {
+                    s->atEOL = 0;
+                    if (s->body) {
+                        cWritten += fwrite(" --body-data=\x22",1,14,s->f);
+                        s->needclose = 1;
+                    } else if (len >= 6 && !strncmp(":curl:",pRead,6)) {
+                        if (len >= 17 && !strncmp(":curl:upload-file",pRead,17)) {
+                            pRead += 17;
+                            len -= 17;
+                            cWritten += fwrite(" --body-file",1,12,s->f);
+                        } else { /* Ignore rest of line */
+                            len -= pRest - pRead;
+                            pRead = pRest;
+                            s->atEOL = -1;
+                        }
+                    } else {
+                        cWritten += fwrite(" --header=\x22",1,11,s->f);
+                        s->needclose = 1;
+                    }
+                }
+            }
+            if (pRest > pRead && pRest[-1] == '\n') {
+                cWritten += fwrite(pRead, 1, pRest - pRead - 1, s->f);
+            } else {
+                cWritten += fwrite(pRead, 1, pRest - pRead, s->f);
+            }
+            len -= pRest - pRead;
+            pRead = pRest;
+        }
+    }
+    fflush(s->f);
+    s->cTotalWritten += cWritten;
+    return cWritten;
+} /* write_to_wget */
+
 PRIVATE int write_to_CURL(void *id, const char *pRead, int len)
 { /* Helper function */
 int cWritten = 0;
-struct write_to_CURL_s *s = (struct write_to_CURL_s *) id;
+struct write_to_CURL_or_wget_s *s = (struct write_to_CURL_or_wget_s *) id;
     if (s->cTotalWritten == 0) {
         const char *pRest = memchr(pRead,' ',len);
         if (!pRest) {
@@ -620,13 +707,13 @@ const char *prepareSHA256(char **ppSHA256,int scanType, unsigned long *contentLe
 int main_help()
 {
 fprintf(stdout, "%s",
-    "awsFillAndSign Copyright 2016 MIB SOFTWARE, INC."
+    "awsFillAndSign Copyright 2016-2017 MIB SOFTWARE, INC."
     "\n"
     "\n"" PURPOSE:   Sign Amazon Web Services requests with AWS Signature Version 4."
     "\n"
-    "\n"" LICENSE:   MIT (Free/OpenSource)"
+    "\n"" LICENSE:   MIT (Free/OpenSource, NO WARRANTY)"
     "\n" 
-    "\n"" STABILITY: UNSTABLE as of 2017-01-17"
+    "\n"" STABILITY: STABLE as of 2017-05-09"
     "\n""            Check for updates at: https://github.com/forrestcavalier/awsFillAndSign"
     "\n"              
     "\n"" SUPPORT:   Contact the author for commercial support and consulting at"
@@ -645,8 +732,6 @@ fprintf(stdout, "%s",
     "\n""  --from-file      Treat the template-name as a file, not a built-in template."
     "\n""                   (Use --list to see built-in templates.)"
     "\n"
-    "\n""  --curl           Output in curl config format."
-    "\n"
     "\n""  --have-sha256    The template has a SHA256 body signature."
     "\n"
     "\n""  -b <file-name>   Calculate SHA256 body signature from specified file."
@@ -656,13 +741,17 @@ fprintf(stdout, "%s",
     "\n""  --read-key       Read credentials from one line on stdin in the format of:"
     "\n""                      <ID>,<SECRET>"
     "\n"
-    "\n""  --verbose        Verbose debugging output on stderr, including generated"
-    "\n""                   AWS Canonical Request fields."
-    "\n"
-    "\n""  -D <name=value>  Put name=value into the environment."
+    "\n""  -D <name=value>  Put name=value in the environment, for template variables."
     "\n"
     "\n""  --encode <flag>  Control percent-encoding. 0 - (default) auto-detect;"
     "\n""                   1 - always percent-encode; -1 - never percent-encode."
+    "\n"
+    "\n""  --curl           Output in curl config format."
+    "\n"
+    "\n""  --wget           Output a command line for wget."
+    "\n"
+    "\n""  --verbose        Verbose debugging output on stderr, including generated"
+    "\n""                   AWS Canonical Request fields."
     "\n"
     "\n""  -                Marker for end of arguments. (Useful when parameters that"
     "\n""                   follow may start with '-'.)"
@@ -760,6 +849,7 @@ int main(int argc, char **argv)
     int scanSignature = 1; /* By default, look for data and upload-file */
     int fromFile = 0;
     int outCurl = 0;
+    int outWget = 0;
     int iEncodeParameters = 0;
     int credentialsFromEnv = 1;
     char credentials[200];
@@ -808,6 +898,8 @@ int main(int argc, char **argv)
                 }
             } else if (!strcmp(argv[argumentIndex], "--curl")) {
                 outCurl = 1;
+            } else if (!strcmp(argv[argumentIndex], "--wget")) {
+                outWget = 1;
             } else if (!strcmp(argv[argumentIndex], "--from-file")) {
                 /* Load template from file */
                 fromFile = 1;
@@ -1082,11 +1174,17 @@ int main(int argc, char **argv)
         }
         if (!errorCode) {
             if (outCurl) {
-                struct write_to_CURL_s s;
+                struct write_to_CURL_or_wget_s s;
                 memset(&s, '\0', sizeof(s));
                 s.f = stdout;
                 signingParameters.outputId = (void *) &s;
                 signingParameters.fnOutput = write_to_CURL;
+            } else if (outWget) {
+                struct write_to_CURL_or_wget_s s;
+                memset(&s, '\0', sizeof(s));
+                s.f = stdout;
+                signingParameters.outputId = (void *) &s;
+                signingParameters.fnOutput = write_to_wget;
             } else {
                 struct write_to_raw_s s;
                 memset(&s, '\0', sizeof(s));
@@ -1123,7 +1221,6 @@ int main(int argc, char **argv)
 }
 
 
-//gcc -o awsFillAndSign -Dlibrock_WANT_BRANCH_COVERAGE -fprofile-arcs -ftest-coverage -DLIBROCK_UNSTABLE -DLIBROCK_AWSFILLANDSIGN_MAIN -Werror -Wall awsFillAndSign.c hmacsha256.c librock_sha256.c
 #if defined librock_WANT_BRANCH_COVERAGE
 #else
 int librock_triggerAlternateBranch(const char *name, long *pLong)
