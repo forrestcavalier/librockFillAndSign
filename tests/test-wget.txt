@@ -1,0 +1,5 @@
+@//.default.AWS_SERVICE_NAME=s3
+PUT https://@1_bucket@.s3.amazonaws.com/@3_objectname@ HTTP/1.1
+:curl:upload-file="@p2_filename@"
+:curl:not-wget="@p2_filename@"
+Host: @1_bucket@.s3.amazonaws.com
