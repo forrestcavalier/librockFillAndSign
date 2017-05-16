@@ -1,2 +1,5 @@
+awsFillAndSign:
+	${CC} -o awsFillAndSign command.c
+
 coverage:
-	${CC} -o awsFillAndSign -Dlibrock_WANT_BRANCH_COVERAGE --coverage -DLIBROCK_UNSTABLE command.c
+	${CC} -o awsFillAndSign_t -Dlibrock_WANT_BRANCH_COVERAGE --coverage command.c
