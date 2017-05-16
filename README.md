@@ -6,7 +6,7 @@ Fill a CURL config file template with AWS  signature version 4. Cross-platform C
 
  LICENSE:   MIT (Free/OpenSource, NO WARRANTY)
 
- STABLITY:  UNSTABLE as of 2017-05-02
+ STABLITY:  STABLE as of 2017-05-09
             <br>Check for updates at: https://github.com/forrestcavalier/awsFillAndSign
             <br>Travis-CI status: [![Build Status](https://travis-ci.org/forrestcavalier/awsFillAndSign.svg?branch=master)](https://travis-ci.org/forrestcavalier/awsFillAndSign)
             <br>CodeCov status: [![codecov](https://codecov.io/gh/forrestcavalier/awsFillAndSign/branch/master/graph/badge.svg)](https://codecov.io/gh/forrestcavalier/awsFillAndSign)
@@ -29,8 +29,6 @@ awsFillAndSign Copyright 2016-2017 MIB SOFTWARE, INC.
   --from-file      Treat the template-name as a file, not a built-in template.
                    (Use --list to see built-in templates.)
 
-  --curl           Output in CURL config format.
-
   --have-sha256    The template has a SHA256 body signature.
 
   -b <file-name>   Calculate SHA256 body signature from specified file.
@@ -40,14 +38,18 @@ awsFillAndSign Copyright 2016-2017 MIB SOFTWARE, INC.
   --read-key       Read credentials from one line on stdin in the format of:
                       <ID>,<SECRET>
 
-  --verbose        Verbose debugging output on stderr, including generated
-                   AWS Canonical Request fields.
-
-  -D <name=value>  Put name=value into the environment.
+  -D <name=value>  Put name=value in the environment, for template variables.
 
   --encode <flag>  Control percent-encoding. 0 - (default) auto-detect;
                    1 - always percent-encode; -1 - never percent-encode.
-                   
+
+  --curl           Output in curl config format.
+
+  --wget           Output a command line for wget.
+
+  --verbose        Verbose debugging output on stderr, including generated
+                   AWS Canonical Request fields.
+
   -                Marker for end of arguments. (Useful when parameters that
                    follow may start with '-'.)
 
@@ -66,7 +68,7 @@ If you run awsFillAndSign --list aws-s3-put you will see an example: the built-i
 @// TEMPLATE FOR:  AWS S3 PUT Object
 @// REST API DOCS: http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPUT.html
 @//
-@// TEMPLATE REVISION:    2017-04-18 by MIB SOFTWARE INC
+@// TEMPLATE REVISION:    2017-05-08 by MIB SOFTWARE INC
 @// TEMPLATE LICENSE:     MIT (Free/Open source, No Warranty)
 @// TEMPLATE PARAMETERS:
 @//   @1_bucket@     - The bucket name
@@ -78,7 +80,7 @@ If you run awsFillAndSign --list aws-s3-put you will see an example: the built-i
 @// template, strip comments, and add headers for AWS Signature version 4.)
 @//
 @//.default.AWS_SERVICE_NAME=s3
-PUT https://@1_bucket@.s3.amazonaws.com/@3_objectname@ HTTP/1.1
+PUT https://@1_bucket@.s3.amazonaws.com/@p3_objectname@ HTTP/1.1
 :curl:upload-file="@p2_filename@"
 Host: @1_bucket@.s3.amazonaws.com
 ```
