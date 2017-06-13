@@ -66,7 +66,7 @@ struct librock_SHA256_CTX;
 
 //[[Implementation]]
 
-void librock_hmacSha256(unsigned char *digest,const char *key,int cbKey,const char *toSign,int cbToSign)
+void librock_hmacSha256(unsigned char *digest, const char *key, int cbKey, const char *toSign, int cbToSign)
 {
     char keyBuffer[64];
     char padBuffer[64];
@@ -77,9 +77,9 @@ void librock_hmacSha256(unsigned char *digest,const char *key,int cbKey,const ch
     void *pContext = &context[0]; /* avoid malloc, so we never have an error to return */
     librock_sha256Init(pContext);
 
-    memset(keyBuffer,'\0',sizeof(keyBuffer));
+    memset(keyBuffer, '\0', sizeof(keyBuffer));
     if (cbKey > 64) {
-        librock_sha256Update(pContext,(unsigned char *) key, cbKey);
+        librock_sha256Update(pContext, (unsigned char *) key, cbKey);
         librock_sha256StoreFinal((unsigned char *)keyBuffer, pContext);
     } else {
         memcpy(keyBuffer, key, cbKey);
@@ -89,19 +89,19 @@ void librock_hmacSha256(unsigned char *digest,const char *key,int cbKey,const ch
         padBuffer[i] = keyBuffer[i] ^ 0x36; /* XOR ipad */
     }
 
-    librock_sha256Update(pContext,(const unsigned char *)padBuffer,sizeof(padBuffer));
+    librock_sha256Update(pContext, (const unsigned char *)padBuffer, sizeof(padBuffer));
 #if (0) //Debugging
     printf("ipad:");
     for(i = 0; i < 64;i++) {
-        printf("%02x",padBuffer[i] & 0xff);
+        printf("%02x", padBuffer[i] & 0xff);
     }
     printf("\n");
 #endif
-    librock_sha256Update(pContext,(const unsigned char *)toSign,cbToSign);
-    librock_sha256StoreFinal((unsigned char *)digest,pContext);
+    librock_sha256Update(pContext, (const unsigned char *)toSign, cbToSign);
+    librock_sha256StoreFinal((unsigned char *)digest, pContext);
 #if (0) //Debugging
     for(i = 0; i < 20;i++) {
-        printf("%02x",digest[i] & 0xff);
+        printf("%02x", digest[i] & 0xff);
     }
     printf("\n");
 #endif
@@ -109,9 +109,9 @@ void librock_hmacSha256(unsigned char *digest,const char *key,int cbKey,const ch
         keyBuffer[i] = keyBuffer[i] ^ 0x5c; /* XOR opad */
     }
     librock_sha256Init(pContext);
-    librock_sha256Update(pContext,(const unsigned char *)keyBuffer,sizeof(keyBuffer));
-    librock_sha256Update(pContext,(const unsigned char *)digest,32); /* SHA256 */
-    librock_sha256StoreFinal((unsigned char *)digest,pContext);
+    librock_sha256Update(pContext, (const unsigned char *)keyBuffer, sizeof(keyBuffer));
+    librock_sha256Update(pContext, (const unsigned char *)digest, 32); /* SHA256 */
+    librock_sha256StoreFinal((unsigned char *)digest, pContext);
 //	free(pContext);
 
 } /* librock_hmacSha256 */
@@ -123,12 +123,12 @@ int main()
 	unsigned char digest[32];
 	int i;
 	const char *tosign = "The quick brown fox jumps over the lazy dog";
-//	librock_hmacSha256(digest,"",0,"",0); /* Test. Expect 0xb613679a0814d9ec772f95d778c35fc5ff1697c493715653c6c712144292c5ad */
-	librock_hmacSha256(digest,"key",3,tosign,strlen(tosign)); /* Test. Expect 0xf7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8 */
+//	librock_hmacSha256(digest, "", 0, "", 0); /* Test. Expect 0xb613679a0814d9ec772f95d778c35fc5ff1697c493715653c6c712144292c5ad */
+	librock_hmacSha256(digest, "key", 3, tosign, strlen(tosign)); /* Test. Expect 0xf7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8 */
 
     printf("hmac-sha256:");
     for(i = 0; i < 32;i++) {
-        printf("%02x",digest[i] & 0xff);
+        printf("%02x", digest[i] & 0xff);
     }
     printf("\n");
 	return 0;

@@ -120,7 +120,7 @@ PRIVATE word_t bsig1(word_t x)
     return rotr(x, 6)^rotr(x, 11)^rotr(x, 25);
 }
 
-PRIVATE word_t shr(word_t x,unsigned n)
+PRIVATE word_t shr(word_t x, unsigned n)
 { //from okdshin's picosha2.h
 //commented out by Forrest Cavalier  assert(n < 32);
     return x >> n;
@@ -140,7 +140,7 @@ PRIVATE void hash256_block(word_t *message_digest, unsigned char const *first/*,
 { //from okdshin's picosha2.h
     word_t w[64];
     unsigned i;
-    word_t a,b,c,d,e,f,g,h;
+    word_t a, b, c, d, e, f, g, h;
     /* commented out by Forrest Cavalier (all w[] are written anyway)
     memset(w,'\0',sizeof w);
     */
@@ -165,8 +165,8 @@ PRIVATE void hash256_block(word_t *message_digest, unsigned char const *first/*,
     h = *(message_digest+7);
     
     for( i = 0; i < 64; ++i){
-        word_t temp1 = h+bsig1(e)+ch(e,f,g)+add_constant[i]+w[i];
-        word_t temp2 = bsig0(a)+maj(a,b,c);
+        word_t temp1 = h+bsig1(e)+ch(e, f, g)+add_constant[i]+w[i];
+        word_t temp2 = bsig0(a)+maj(a, b, c);
         h = g;
         g = f;
         f = e;
@@ -248,7 +248,7 @@ int librock_sha256Update(struct librock_SHA256_CTX *c, const void *data_, int le
 
     /* If working on a partial block, and can fill it out, process it. */ 
     if (c->nBuffer > 0 && (len - i + c->nBuffer >= 64)) {
-        memcpy(c->buffer+c->nBuffer,(char *)data_+i,64 - c->nBuffer);
+        memcpy(c->buffer+c->nBuffer, (char *)data_+i, 64 - c->nBuffer);
         i += 64 - c->nBuffer;
         hash256_block(c->h_, c->buffer);
         c->nBuffer = 0;
@@ -259,7 +259,7 @@ int librock_sha256Update(struct librock_SHA256_CTX *c, const void *data_, int le
         i += 64;
     }
     if (len - i > 0) { /* Save partial */
-        memcpy(c->buffer+c->nBuffer,(char *)data_+i,len - i);
+        memcpy(c->buffer+c->nBuffer, (char *)data_+i, len - i);
         c->nBuffer += len - i;
     }
     return 1;
@@ -273,11 +273,11 @@ int librock_sha256StoreFinal (unsigned char *md, struct librock_SHA256_CTX *c)
     c->buffer[c->nBuffer] = 0x80;
 
     if(c->nBuffer > 55) {
-        memset(c->buffer+c->nBuffer+1,'\0', 64-c->nBuffer-1);
+        memset(c->buffer+c->nBuffer+1, '\0', 64-c->nBuffer-1);
         hash256_block(c->h_, c->buffer);
-        memset(c->buffer,'\0', 56);
+        memset(c->buffer, '\0', 56);
     } else {
-        memset(c->buffer+c->nBuffer+1,'\0', 56-c->nBuffer-1);
+        memset(c->buffer+c->nBuffer+1, '\0', 56-c->nBuffer-1);
     }
 
     {/* write data bit length, adapted from picosha2.h */
@@ -301,7 +301,7 @@ int librock_sha256StoreFinal (unsigned char *md, struct librock_SHA256_CTX *c)
     }       
     hash256_block(c->h_, c->buffer);
     
-    memset(c->buffer,'\0',sizeof c->buffer); //Clear temporary buffer.
+    memset(c->buffer, '\0', sizeof c->buffer); //Clear temporary buffer.
     for(i = 0; i < 8; i++) {
         *md++ = (c->h_[i]>>24) & 0xff;
         *md++ = (c->h_[i]>>16) & 0xff;
@@ -321,10 +321,10 @@ int librock_sha256StoreFinal (unsigned char *md, struct librock_SHA256_CTX *c)
 #include <time.h> //clock()
 #include <string.h>
 
-void dumpmem(unsigned char *md,int len)
+void dumpmem(unsigned char *md, int len)
 {int i;
     for(i = 0;i < len;i++) {
-        printf("%02x",md[i]);
+        printf("%02x", md[i]);
     }
     printf("\n");
 }
@@ -360,7 +360,7 @@ int main()
                 perror("Creating buffer");
                 exit(-1);
             }
-            memset(str,'a',len);
+            memset(str, 'a', len);
             str[len] = 0;
             c = clock();
 
@@ -370,7 +370,7 @@ int main()
             for(i = 0;i < 4;i++) {     /* expect cdc76e5c 9914fb92 81a1c7e2 84d73e67 f1809a48 a497200e 046d39cc c7112cd0 */
         //        for(i = 0;i < 40;i++) {
                     librock_SHA256_Update( pHashInfo, ( unsigned char * ) str, len );
-                    printf("%d\n",i);
+                    printf("%d\n", i);
                 }
             }
             printf("%g\n", (float) (clock() - c) / CLOCKS_PER_SEC);
@@ -389,9 +389,9 @@ int main()
             }
         }
 
-        librock_SHA256_StoreFinal( md,pHashInfo );
+        librock_SHA256_StoreFinal( md, pHashInfo );
 
-        dumpmem(md,sizeof(md)); //Show result to stdout
+        dumpmem(md, sizeof(md)); //Show result to stdout
     }
     free(pHashInfo);
     return 0;
