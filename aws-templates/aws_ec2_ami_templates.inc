@@ -177,4 +177,3 @@
     "\n""header = \"Authorization: AWS4-HMAC-SHA256 Credential=...,SignedHeaders=...,Signature=... (all will be replaced)\""
 
 */
-	
