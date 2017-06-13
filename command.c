@@ -1,4 +1,4 @@
-/* awsFillAndSign/command.c Copyright 2017 MIB SOFTWARE, INC.
+/* librockFillAndSign/command.c Copyright 2017 MIB SOFTWARE, INC.
    Licensed under the terms of the MIT License (Free/OpenSource, NO WARRANTY)
    (See the LICENSE file in the source.)
    
@@ -19,9 +19,9 @@
 
             Single Compilation Unit (a.k.a. unity build)
             Compile using:
-                gcc awsFillAndSign/command.c
+                gcc command.c -lpthread
             or
-                cl awsFillAndSign/command.c
+                cl command.c
                 
             See below for compiling into a library.
             
@@ -52,7 +52,7 @@
               is actually very, very easy.)
               
             - Get pay-as-you-go and contract support and advice for
-              getting awsFillAndSign working in your application,
+              getting fillAndSign working in your application,
               customization, custom templates, porting to other systems,
               etc.
 
@@ -63,16 +63,17 @@
 #if !defined(PRIVATE)
 #define PRIVATE static
 #endif
-#include "awsFillAndSign.h"
+#define LIBROCK_WANT_GMTIME_R 1
+#include "u-librock/mit/fillAndSign.h"
 
 #   include <stdio.h> /* fwrite, fprintf */
 #   include <fcntl.h>
-#   include "ulibrock/mit/librock_fdio.h" /* portable _open, read, close */
+#define LIBROCK_WANT_fileSha256Contents
+#define LIBROCK_WANT_fileGetContents
+#   include "u-librock/mit/librock_fdio.h" /* portable _open, read, close */
     PRIVATE char *mallocNamedValue(const char *pName);
     int main(int argc, char **argv);
     PRIVATE int write_to_FILE(void *id, const char *pSource, int count); /* helper function */
-    const char *librock_fileSha256Contents(const char *fname, unsigned char *mdBuffer32, unsigned long *contentLength); /* store 32 bytes, returns error explanation or 0 */
-    void *librock_fileGetContents(const char *fname); /* allocate memory, read entire file */
     
     const char *librock_fillTemplateTokenize(
                         const char *pTemplate,
@@ -92,7 +93,7 @@
 //[[built-in templates]]
 
 const char *librock_awsBuiltInTemplates[] = {
-    "@//awsFillAndSign_write_templates_" //Placeholder
+    "@//fillAndSign_write_templates_" //Placeholder
 
 #include "aws_templates.inc"
 
@@ -179,8 +180,8 @@ const char *librock_awsBuiltInTemplate(const char *pName)
     i = 0;
     cName = strlen(pName);
     while(librock_awsBuiltInTemplates[i]) {
-        if (countToStr(librock_awsBuiltInTemplates[i]+3,";")==cName) {
-            if (!strncmp(pName,librock_awsBuiltInTemplates[i]+3,cName)) {
+        if (countToStr(librock_awsBuiltInTemplates[i]+3, ";")==cName) {
+            if (!strncmp(pName, librock_awsBuiltInTemplates[i]+3, cName)) {
                 return librock_awsBuiltInTemplates[i];
             }
         }
@@ -202,37 +203,37 @@ PRIVATE int write_to_wget(void *id, const char *pRead, int len)
 int cWritten = 0;
 struct write_to_CURL_or_wget_s *s = (struct write_to_CURL_or_wget_s *) id;
     if (s->cTotalWritten == 0) {
-        const char *pRest = memchr(pRead,' ',len);
+        const char *pRest = memchr(pRead, ' ', len);
         if (!pRest) {
             pRest = pRead + strlen(pRead);
         }
-        cWritten += fwrite("wget -O - --method=",1,19,s->f);
-        cWritten += fwrite(pRead,1,pRest - pRead,s->f);
+        cWritten += fwrite("wget -O - --method=", 1, 19, s->f);
+        cWritten += fwrite(pRead, 1, pRest - pRead, s->f);
 //        cWritten += fwrite("\n",1,1,s->f);
         if (*pRest) {
             pRest++;
         }
         len -= pRest - pRead;
         pRead = pRest;
-        pRest = memchr(pRead,' ',len);
+        pRest = memchr(pRead, ' ', len);
         if (!pRest) {
             pRest = pRead + len;
         }
-        cWritten += fwrite(" \x22",1,2,s->f);
-        cWritten += fwrite(pRead,1,pRest - pRead,s->f);
+        cWritten += fwrite(" \x22", 1, 2, s->f);
+        cWritten += fwrite(pRead, 1, pRest - pRead, s->f);
         s->needclose = 1;
         len = 0;
     } else if (pRead == 0) {
         if (s->needclose) {
-            cWritten += fwrite("\x22",1,1,s->f);
+            cWritten += fwrite("\x22", 1, 1, s->f);
         }
     } else {
         while(len > 0) {
-            const char *pRest = memchr(pRead,'\n',len);
+            const char *pRest = memchr(pRead, '\n', len);
             if (pRest == pRead) {
                 pRest++;
                 if (s->needclose) {
-                    cWritten += fwrite("\x22",1,1,s->f);
+                    cWritten += fwrite("\x22", 1, 1, s->f);
                     s->needclose = 0;
                 }
                 if (s->atEOL) {
@@ -242,33 +243,26 @@ struct write_to_CURL_or_wget_s *s = (struct write_to_CURL_or_wget_s *) id;
                 }
                 s->atEOL = 1;
             } else {
-                if (!pRest) {
-                    pRest = pRead + len;
-                }
-                if (s->atEOL == -1) {
-                    /* Ignore rest of line */
-                    len -= pRest - pRead;
-                    pRead = pRest;
-                } else if (s->atEOL) {
-                    s->atEOL = 0;
+                if (s->atEOL) {
                     if (s->body) {
-                        cWritten += fwrite(" --body-data=\x22",1,14,s->f);
+                        cWritten += fwrite(" --body-data=\x22", 1, 14, s->f);
                         s->needclose = 1;
-                    } else if (len >= 6 && !strncmp(":curl:",pRead,6)) {
-                        if (len >= 17 && !strncmp(":curl:upload-file",pRead,17)) {
-                            pRead += 17;
-                            len -= 17;
-                            cWritten += fwrite(" --body-file",1,12,s->f);
-                        } else { /* Ignore rest of line */
-                            len -= pRest - pRead;
-                            pRead = pRest;
-                            s->atEOL = -1;
-                        }
+                    } else if (len >= 6 && !strncmp(":curl:upload-file", pRead, 17)) {
+                        pRead += 17;
+                        len -= 17;
+                        cWritten += fwrite(" --body-file", 1, 12, s->f);
+                    } else if (len >= 6 && !strncmp(":curl:", pRead, 6)) {
+                        pRead += 6;
+                        len -= 6;
                     } else {
-                        cWritten += fwrite(" --header=\x22",1,11,s->f);
+                        cWritten += fwrite(" --header=\x22", 1, 11, s->f);
                         s->needclose = 1;
                     }
                 }
+                if (!pRest) {
+                    pRest = pRead + len;
+                }
+                s->atEOL = 0;
             }
             if (pRest > pRead && pRest[-1] == '\n') {
                 cWritten += fwrite(pRead, 1, pRest - pRead - 1, s->f);
@@ -289,37 +283,37 @@ PRIVATE int write_to_CURL(void *id, const char *pRead, int len)
 int cWritten = 0;
 struct write_to_CURL_or_wget_s *s = (struct write_to_CURL_or_wget_s *) id;
     if (s->cTotalWritten == 0) {
-        const char *pRest = memchr(pRead,' ',len);
+        const char *pRest = memchr(pRead, ' ', len);
         if (!pRest) {
             pRest = pRead + strlen(pRead);
         }
-        cWritten += fwrite("request=",1,8,s->f);
-        cWritten += fwrite(pRead,1,pRest - pRead,s->f);
-        cWritten += fwrite("\n",1,1,s->f);
+        cWritten += fwrite("request=", 1, 8, s->f);
+        cWritten += fwrite(pRead, 1, pRest - pRead, s->f);
+        cWritten += fwrite("\n", 1, 1, s->f);
         if (*pRest) {
             pRest++;
         }
         len -= pRest - pRead;
         pRead = pRest;
-        pRest = memchr(pRead,' ',len);
+        pRest = memchr(pRead, ' ', len);
         if (!pRest) {
             pRest = pRead + len;
         }
-        cWritten += fwrite("url=\x22",1,5,s->f);
-        cWritten += fwrite(pRead,1,pRest - pRead,s->f);
+        cWritten += fwrite("url=\x22", 1, 5, s->f);
+        cWritten += fwrite(pRead, 1, (int)(pRest - pRead), s->f);
         s->needclose = 1;
         len = 0;
-    } else if (len == 0 && pRead == 0) {
+    } else if (pRead == 0) {
         if (s->needclose) {
-            cWritten += fwrite("\x22",1,1,s->f);
+            cWritten += fwrite("\x22", 1, 1, s->f);
         }
     } else {
         while(len > 0) {
-            const char *pRest = memchr(pRead,'\n',len);
+            const char *pRest = memchr(pRead, '\n', len);
             if (pRest == pRead) {
                 pRest++;
                 if (s->needclose) {
-                    cWritten += fwrite("\x22",1,1,s->f);
+                    cWritten += fwrite("\x22", 1, 1, s->f);
                     s->needclose = 0;
                 }
                 if (s->atEOL) {
@@ -331,13 +325,13 @@ struct write_to_CURL_or_wget_s *s = (struct write_to_CURL_or_wget_s *) id;
             } else {
                 if (s->atEOL) {
                     if (s->body) {
-                        cWritten += fwrite("data=\x22",1,6,s->f);
+                        cWritten += fwrite("data=\x22", 1, 6, s->f);
                         s->needclose = 1;
-                    } else if (len >= 6 && !strncmp(":curl:",pRead,6)) {
+                    } else if (len >= 6 && !strncmp(":curl:", pRead, 6)) {
                         pRead += 6;
                         len -= 6;
                     } else {
-                        cWritten += fwrite("header=\x22",1,8,s->f);
+                        cWritten += fwrite("header=\x22", 1, 8, s->f);
                         s->needclose = 1;
                     }
                 }
@@ -377,7 +371,7 @@ struct write_to_raw_s *s = (struct write_to_raw_s *) id;
 /* DEBUG: Content-Type: application/x-www-form-urlencoded, and Content-Length
  */
     while(len > 0) {
-        const char *pRest = memchr(pRead,'\n',len);
+        const char *pRest = memchr(pRead, '\n', len);
         if (!pRest) {
             pRest = pRead + len;
         }
@@ -386,7 +380,7 @@ struct write_to_raw_s *s = (struct write_to_raw_s *) id;
         } else {
             s->skipn = 0;
         }
-        if (!strncmp(pRead,":curl:",6)) {
+        if (!strncmp(pRead, ":curl:", 6)) {
             s->skipn = 1;
         } else if (s->skipn) {
             s->skipn = 0;
@@ -401,7 +395,7 @@ struct write_to_raw_s *s = (struct write_to_raw_s *) id;
     return cWritten;
 } /* write_to_raw */
 
-int librock_stringListGetIndex(char ***ppStrings,int cStep, const char *pName, int cName);
+int librock_stringListGetIndex(char ***ppStrings, int cStep, const char *pName, int cName);
 
 PRIVATE char *mallocNamedValue(const char *pName)
 {
@@ -442,7 +436,7 @@ while(*pRead) {
     int iTokenType = atoi(librock_fillTemplateTokenize(pRequestTemplate, pRead - pRequestTemplate, &cToken));
     if (iTokenType == 1) {//* comment
         int cName;
-        if (cToken > 12 && !strncmp(pRead,"@//.default.",12)) {
+        if (cToken > 12 && !strncmp(pRead, "@//.default.", 12)) {
             pRead += 12;
             cToken -= 12;
             cName = countToStr(pRead, "=");
@@ -551,12 +545,12 @@ PRIVATE const char *collectNamedParameters(char ***pppNamedArguments, const char
 
 } /* collectNamedParameters */
 
-const char *mallocNamedTemplate(char **ppRequestTemplate,int fromFile,const char *pName)
+const char *mallocNamedTemplate(char **ppRequestTemplate, int fromFile, const char *pName)
 {
     char *pWrite = 0;
     char *pRead;
     if (fromFile) {
-        *ppRequestTemplate = (char *) librock_fileGetContents(pName);
+        *ppRequestTemplate = (char *) librock_fileGetContents(pName, 0);
         if (!*ppRequestTemplate) {
             return "E-1096 did not load file";
         }
@@ -564,12 +558,12 @@ const char *mallocNamedTemplate(char **ppRequestTemplate,int fromFile,const char
         char *pBuiltIn = (char *) librock_awsBuiltInTemplate(pName);
         int size;
         if (!pBuiltIn) {
-            return "I-1515 no built-in template";
+            return "E-1515 no built-in template";
         }
         size = strlen(pBuiltIn);
         *ppRequestTemplate = malloc(size+1);
         if (!*ppRequestTemplate) {
-            return "I-1515 malloc failed";
+            return "E-1515 malloc failed";
         }
         memmove(*ppRequestTemplate, pBuiltIn, size+1);
     }
@@ -588,7 +582,7 @@ const char *mallocNamedTemplate(char **ppRequestTemplate,int fromFile,const char
 
 } /* mallocNamedTemplate */
 
-const char *prepareSHA256(char **ppSHA256,int scanType, unsigned long *contentLength, unsigned char *mdContent32, const char *pFilledRequest)
+const char *prepareSHA256(char **ppSHA256, int scanType,  unsigned long *contentLength, unsigned char *mdContent32, const char *pFilledRequest)
 {
     if (scanType == 1) { /* process CURL options to determine body */
         /* Find an upload-file or data= field in the request. */
@@ -707,7 +701,7 @@ const char *prepareSHA256(char **ppSHA256,int scanType, unsigned long *contentLe
 int main_help()
 {
 fprintf(stdout, "%s",
-    "awsFillAndSign Copyright 2016-2017 MIB SOFTWARE, INC."
+    "librockFillAndSign Copyright 2016-2017 MIB SOFTWARE, INC."
     "\n"
     "\n"" PURPOSE:   Sign Amazon Web Services requests with AWS Signature Version 4."
     "\n"
@@ -720,7 +714,7 @@ fprintf(stdout, "%s",
     "\n""            http://www.mibsoftware.com/"
     "\n"
     "\n"
-    "\n"" USAGE: awsFillAndSign [OPTIONS] <template-name> [param1[ param2...]]"
+    "\n"" USAGE: librockFillAndSign [OPTIONS] <template-name> [param1[ param2...]]"
     "\n"
     "\n""   The output is the filled template with AWS Version 4 signatures."
     "\n""   Credentials come from the environment variables AWS_ACCESS_KEY_ID"
@@ -753,7 +747,7 @@ fprintf(stdout, "%s",
     "\n""  --verbose        Verbose debugging output on stderr, including generated"
     "\n""                   AWS Canonical Request fields."
     "\n"
-    "\n""  -                Marker for end of arguments. (Useful when parameters that"
+    "\n""  --               Marker for end of arguments. (Useful when parameters that"
     "\n""                   follow may start with '-'.)"
     "\n"
     "\n"" INFORMATION commands (output is not a filled and signed template:)"
@@ -771,7 +765,7 @@ int main_list(int argc, char **argv)
     i = 1;
     if (argumentIndex == argc-1) {
         while(librock_awsBuiltInTemplates[i]) {
-            fprintf(stdout, "%.*s\n", countToStr(librock_awsBuiltInTemplates[i]+3,";"), librock_awsBuiltInTemplates[i]+3);
+            fprintf(stdout, "%.*s\n", countToStr(librock_awsBuiltInTemplates[i]+3, ";"), librock_awsBuiltInTemplates[i]+3);
             i++;
         }
     } else {
@@ -786,30 +780,30 @@ int main_list(int argc, char **argv)
         fprintf(stdout, "@//%s\n", argv[argumentIndex+1]);
 
         // Templates are stored in a compact format. Expand it
-        pFields = pRequestTemplate + countToStr(pRequestTemplate,";")+1;
+        pFields = pRequestTemplate + countToStr(pRequestTemplate, ";")+1;
         pRequestTemplate += countToStr(pRequestTemplate, "\n")+1;
-        pNext = strstr(pRequestTemplate,"REST API DOCS");
+        pNext = strstr(pRequestTemplate, "REST API DOCS");
         if (!pNext) {
-            pNext = strstr(pRequestTemplate,"TEMPLATE FOR:");
+            pNext = strstr(pRequestTemplate, "TEMPLATE FOR:");
         }
         if (!pNext) {
             pNext = pRequestTemplate;
         }
         
         pNext += countToEol(pNext) + 1;
-        fprintf(stdout, "%.*s", pNext - pRequestTemplate,pRequestTemplate);
+        fprintf(stdout, "%.*s", (int) (pNext - pRequestTemplate), pRequestTemplate);
         fprintf(stdout, "@//");
         fprintf(stdout, "\n@// TEMPLATE REVISION:    ");
-        cField = countToStr(pFields,";");
+        cField = countToStr(pFields, ";");
         if (pFields + cField < pRequestTemplate) {
-            fprintf(stdout,"%.*s", cField ,pFields);
+            fprintf(stdout, "%.*s", cField, pFields);
         } else {
             cField = pRequestTemplate - pFields - 1;
         }
         pFields += cField + 1;
-        cField = countToStr(pFields,";");
+        cField = countToStr(pFields, ";");
         if (pFields + cField < pRequestTemplate) {
-            fprintf(stdout," by %.*s", cField ,pFields);
+            fprintf(stdout, " by %.*s", cField, pFields);
         } else {
             cField = pRequestTemplate - pFields - 1;
         }
@@ -817,24 +811,24 @@ int main_list(int argc, char **argv)
         fprintf(stdout, "\n@// TEMPLATE LICENSE:     ");
         cField = pRequestTemplate-pFields-1;
         if (cField > 0) {
-            fprintf(stdout,"%.*s", cField ,pFields);
+            fprintf(stdout, "%.*s", cField, pFields);
         }
-        if (countToStr(pNext,"  @1") < countToStr(pNext,"\n")) {
+        if (countToStr(pNext, "  @1") < countToStr(pNext, "\n")) {
             fprintf(stdout, "\n@// TEMPLATE PARAMETERS:");
         }
         pRequestTemplate = pNext-1;
-        pNext = strstr(pRequestTemplate,"\n@//.default.");
+        pNext = strstr(pRequestTemplate, "\n@//.default.");
         if (!pNext) {
             pNext = pRequestTemplate + strlen(pRequestTemplate);
         }
-        fprintf(stdout,"%.*s", pNext-pRequestTemplate, pRequestTemplate);
-        fprintf(stdout,"%s",
+        fprintf(stdout, "%.*s", (int) (pNext-pRequestTemplate), pRequestTemplate);
+        fprintf(stdout, "%s",
             "\n""@//"
-            "\n""@// (Before using CURL, use awsFillAndSign by MIB SOFTWARE to fill the"
+            "\n""@// (Before using CURL, use librockFillAndSign by MIB SOFTWARE to fill the"
             "\n""@// template, strip comments, and add headers for AWS Signature version 4.)"
             "\n""@//"
             );
-        fprintf(stdout,"%s", pNext);
+        fprintf(stdout, "%s", pNext);
         pRequestTemplate = 0; /* Was not allocated */
         return 0;
     }
@@ -853,7 +847,7 @@ int main(int argc, char **argv)
     int iEncodeParameters = 0;
     int credentialsFromEnv = 1;
     char credentials[200];
-    struct librock_awsFillAndSignParameters_s signingParameters;
+    struct librock_fillAndSignParameters_s signingParameters;
     unsigned char mdContent32[] = { /* SHA256 of empty string */
         0xe3,0xb0,0xc4,0x42,0x98,0xfc,0x1c,0x14,0x9a,0xfb,0xf4,0xc8,0x99,0x6f,0xb9,0x24,0x27,0xae,0x41,0xe4,0x64,0x9b,0x93,0x4c,0xa4,0x95,0x99,0x1b,0x78,0x52,0xb8,0x55
     };
@@ -864,23 +858,23 @@ int main(int argc, char **argv)
 
 #if defined librock_WANT_BRANCH_COVERAGE
     argumentIndex = 1;
-    fprintf(stderr,"I-1474 %s(COVERAGE TEST)", "[[awsFillAndSign]]");
+    fprintf(stderr, "I-1474 %s(COVERAGE TEST)", "[[librockFillAndSign]]");
     while(argumentIndex < argc) {
         fprintf(stderr, " %s", argv[argumentIndex]);
-        if (!strncmp(argv[argumentIndex],"-Dtest=",7)) {
+        if (!strncmp(argv[argumentIndex], "-Dtest=", 7)) {
             putenv(argv[argumentIndex]+2);
         }
         argumentIndex++;
     }
-    fprintf(stderr,"\n");
+    fprintf(stderr, "\n");
 #endif
     librock_triggerAlternateBranch(0, 0); /* Initialize branch alteration mechanism */
     /* Accept command line flags preceding the template file name*/
     argumentIndex = 1;
     if (argc > argumentIndex) {
         while(argumentIndex < argc && argv[argumentIndex][0]=='-') {
-            if (!strcmp(argv[argumentIndex], "-")) {
-                /* This means end of arguments. Only useful to allow a
+            if (!strcmp(argv[argumentIndex], "--")) {
+                /* This means end of arguments. Useful to allow a
                    template file name to start with - */
                 argumentIndex++;
                 break;
@@ -894,7 +888,7 @@ int main(int argc, char **argv)
                     /* Error */
                     argumentIndex = argc;
                 } else {
-                    return main_list(argc-argumentIndex,argv+argumentIndex);
+                    return main_list(argc-argumentIndex, argv+argumentIndex);
                 }
             } else if (!strcmp(argv[argumentIndex], "--curl")) {
                 outCurl = 1;
@@ -934,7 +928,7 @@ int main(int argc, char **argv)
                 }
                 if (strstr(pVariable, "AWS_SECRET_ACCESS_KEY=")!=0) {
                     /* Prohibit operation with potential secret disclosure */
-                    fprintf(stderr, "-D must not set AWS_SECRET_ACCESS_KEY on command line\n");
+                    fprintf(stderr, "E-930 Do not use -D to set AWS_SECRET_ACCESS_KEY on command line\n");
                     return 15;
                 }
                 putenv((char *) pVariable);
@@ -965,12 +959,12 @@ int main(int argc, char **argv)
                 }
                 pErrorMessage = librock_fileSha256Contents(pBody, &mdContent32[0], &contentLength);
                 if (pErrorMessage) {
-                    fprintf(stderr, "%s for file '%s'\n", pErrorMessage, pBody);
+                    fprintf(stderr, "%s for body file '%s'\n", pErrorMessage, pBody);
                     return 7;
                 }
                 signingParameters.CONTENT_LENGTH = contentLength;
             } else {
-                fprintf(stderr, "E-1457 Unrecognized option: %s\nTry --help.\n",argv[argumentIndex]);
+                fprintf(stderr, "E-1457 Unrecognized option: %s\nTry --help.\n", argv[argumentIndex]);
                 return 8;
             }
             argumentIndex++;
@@ -978,14 +972,14 @@ int main(int argc, char **argv)
     }
 
     if (argumentIndex >= argc) {
-        fprintf(stderr, "Usage: awsFillAndSign <template-name> [param1[ param2...]]\nTry --help.\n");
+        fprintf(stderr, "Usage: librockFillAndSign <template-name> [param1[ param2...]]\nTry --help.\n");
         return -1;
     }
     
     
     { /* Get template */
         const char *pName = argv[argumentIndex];
-        const char *pErrorMessage = mallocNamedTemplate(&pRequestTemplate,fromFile,pName);
+        const char *pErrorMessage = mallocNamedTemplate(&pRequestTemplate, fromFile, pName);
         if (pErrorMessage) {
             if (fromFile) {
                 perror(pErrorMessage);
@@ -1007,7 +1001,7 @@ int main(int argc, char **argv)
 
     { /* Determine Signing Parameters */
         const char *pName;
-        const char *pErrorMessage = collectNamedParameters(&ppNamedArguments,pRequestTemplate);
+        const char *pErrorMessage = collectNamedParameters(&ppNamedArguments, pRequestTemplate);
 
         if (!pErrorMessage) { /* prep the AWS_AMZDATE, in case of V2 requests where it is not already present */
             char buffer[100];
@@ -1023,17 +1017,23 @@ int main(int argc, char **argv)
             signingParameters.CONTENT_TYPE = 0;
             signingParameters.AWS_SHA256 = 0; //Set below
             pName = "AWS_DEFAULT_REGION";
-            signingParameters.AWS_DEFAULT_REGION = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+            signingParameters.AWS_DEFAULT_REGION = ppNamedArguments[
+                    librock_stringListGetIndex(&ppNamedArguments, 2, pName, strlen(pName) )+1
+                    ];
 
             if (!signingParameters.AWS_DEFAULT_REGION) {
                 pErrorMessage = "E-2173 need complete signingParameters. Missing Service Region.";
             }
 
             pName = "AWS_SERVICE_NAME";
-            signingParameters.AWS_SERVICE_NAME = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+            signingParameters.AWS_SERVICE_NAME = ppNamedArguments[
+                    librock_stringListGetIndex(&ppNamedArguments, 2, pName, strlen(pName) )+1
+                    ];
             
             pName = "AWS_SECURITY_TOKEN";
-            signingParameters.AWS_SECURITY_TOKEN = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+            signingParameters.AWS_SECURITY_TOKEN = ppNamedArguments[
+                    librock_stringListGetIndex(&ppNamedArguments, 2, pName, strlen(pName) )+1
+                    ];
         }
         if (pErrorMessage) {
             fprintf(stderr, "%s\n", pErrorMessage);
@@ -1042,7 +1042,7 @@ int main(int argc, char **argv)
         if (!pErrorMessage) {
             int iString;
             pName = "AWS_REGION_NOT_USEAST1";
-            iString = librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) );
+            iString = librock_stringListGetIndex(&ppNamedArguments, 2, pName, strlen(pName) );
             if (GLOBAL_ALTERNATE_BRANCH) {
                 iString = -1;
             }
@@ -1059,11 +1059,11 @@ int main(int argc, char **argv)
                     pErrorMessage = "E-2558 malloc failed";
                 }
                 if (!pErrorMessage) {
-                    memmove(ppNamedArguments[iString], pName,strlen(pName)+1);
+                    memmove(ppNamedArguments[iString], pName, strlen(pName)+1);
                     pLiteral = signingParameters.AWS_DEFAULT_REGION;
                     if (strcmp(pLiteral, "us-east-1")) {
                         ppNamedArguments[iString+1][0] = '.';
-                        memmove(ppNamedArguments[iString+1]+1, pLiteral,strlen(pLiteral)+1);
+                        memmove(ppNamedArguments[iString+1]+1, pLiteral, strlen(pLiteral)+1);
                     } else {
                         ppNamedArguments[iString+1][0] = '\0';
                     }
@@ -1079,9 +1079,13 @@ int main(int argc, char **argv)
                         "@eAWS_ACCESS_KEY_ID@,@eAWS_SECRET_ACCESS_KEY@");
                 if (!pErrorMessage) {
                     pName = "AWS_ACCESS_KEY_ID";
-                    signingParameters.AWS_ACCESS_KEY_ID = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+                    signingParameters.AWS_ACCESS_KEY_ID = ppNamedArguments[
+                            librock_stringListGetIndex(&ppNamedArguments, 2, pName, strlen(pName) )+1
+                            ];
                     pName = "AWS_SECRET_ACCESS_KEY";
-                    signingParameters.AWS_SECRET_ACCESS_KEY = ppNamedArguments[librock_stringListGetIndex(&ppNamedArguments, 2,pName, strlen(pName) )+1];
+                    signingParameters.AWS_SECRET_ACCESS_KEY = ppNamedArguments[
+                            librock_stringListGetIndex(&ppNamedArguments, 2, pName, strlen(pName) )+1
+                            ];
                 } else {
                     fprintf(stderr, "%s\n", pErrorMessage);
                     errorCode = 14;
@@ -1099,7 +1103,7 @@ int main(int argc, char **argv)
                     fprintf(stderr, "I-1737 reading credentials on stdin\n");
                 }
 
-                pCredentials = fgets(credentials,sizeof(credentials)-1, stdin);
+                pCredentials = fgets(credentials, sizeof(credentials)-1, stdin);
                 
                 if (GLOBAL_ALTERNATE_BRANCH) {
                     pCredentials = 0;
@@ -1110,7 +1114,7 @@ int main(int argc, char **argv)
                 } else if (strlen(credentials) >= sizeof(credentials) - 2) {
                     fprintf(stderr, "E-1167 The credentials string on stdin is too long\n");
                     errorCode = 6;
-                } else if (!strchr(credentials,',')) {
+                } else if (!strchr(credentials, ',')) {
                     fprintf(stderr, "E-1956 Need comma-separated credentials on stdin\n");
                     errorCode = 16;
                 } else {
@@ -1138,9 +1142,9 @@ int main(int argc, char **argv)
                                                 &iError);
         if (pErrorMessage) {
             int cContext = countToEol(pRequestTemplate + iError);
-            if (countToStr(pRequestTemplate+iError,"@") < cContext) {
+            if (countToStr(pRequestTemplate+iError, "@") < cContext) {
                 if (pRequestTemplate[iError]!='@') {
-                    cContext = countToStr(pRequestTemplate + iError,"@");
+                    cContext = countToStr(pRequestTemplate + iError, "@");
                 }
             }
             fprintf(stderr, "%s at %d:%.*s\n", pErrorMessage, iError, cContext, pRequestTemplate + iError);
@@ -1173,29 +1177,28 @@ int main(int argc, char **argv)
             }
         }
         if (!errorCode) {
+            struct write_to_CURL_or_wget_s s;
+            struct write_to_raw_s s2;
             if (outCurl) {
-                struct write_to_CURL_or_wget_s s;
                 memset(&s, '\0', sizeof(s));
                 s.f = stdout;
                 signingParameters.outputId = (void *) &s;
                 signingParameters.fnOutput = write_to_CURL;
             } else if (outWget) {
-                struct write_to_CURL_or_wget_s s;
                 memset(&s, '\0', sizeof(s));
                 s.f = stdout;
                 signingParameters.outputId = (void *) &s;
                 signingParameters.fnOutput = write_to_wget;
             } else {
-                struct write_to_raw_s s;
-                memset(&s, '\0', sizeof(s));
-                s.f = stdout;
-                signingParameters.outputId = (void *) &s;
+                memset(&s2, '\0', sizeof(s2));
+                s2.f = stdout;
+                signingParameters.outputId = (void *) &s2;
                 signingParameters.fnOutput = write_to_raw;
             }
             signingParameters.debugOutputId = (void *) stderr;
             signingParameters.fnDebugOutput = bVerbose ? write_to_FILE : 0;
             
-            pErrorMessage = librock_awsFillAndSign(
+            pErrorMessage = librock_fillAndSign(
                                     pFilledRequest, &signingParameters);
             if (pErrorMessage) {
                 fprintf(stderr, "%s\n", pErrorMessage);
@@ -1221,6 +1224,7 @@ int main(int argc, char **argv)
 }
 
 
+//gcc -o librockFillAndSign -Dlibrock_WANT_BRANCH_COVERAGE --coverage -Werror -Wall command.c
 #if defined librock_WANT_BRANCH_COVERAGE
 #else
 int librock_triggerAlternateBranch(const char *name, long *pLong)
@@ -1243,23 +1247,23 @@ int librock_triggerAlternateBranch(const char *name, long *pLong)
 }
 #endif
 
-#define LIBROCK_AWSFILLANDSIGN_MAIN 1
-#if defined(LIBROCK_AWSFILLANDSIGN_MAIN)
+#define LIBROCK_FILLANDSIGN_MAIN 1
+#if defined(LIBROCK_FILLANDSIGN_MAIN)
 //#   define LIBROCK_WANT_fillTemplate
-#   include "ulibrock/mit/stringlist.c"
-#   include "ulibrock/mit/librock_fillTemplate.c"
-#   include "ulibrock/mit/appendable.c"
-#   include "awsFillAndSign.c"
-#   include "ulibrock/mit/hmacsha256.c"
-#   include "ulibrock/mit/librock_sha256.c"
+#   include "u-librock/mit/stringlist.c"
+#   include "u-librock/mit/librock_fillTemplate.c"
+#   include "u-librock/mit/appendable.c"
+#   include "u-librock/mit/fillAndSign.c"
+#   include "u-librock/mit/hmacsha256.c"
+#   include "u-librock/mit/librock_sha256.c"
 
 #   define LIBROCK_WANT_fileGetContents
 #   define LIBROCK_WANT_fileSha256Contents
-#   include "ulibrock/mit/librock_fdio.c"
+#   include "u-librock/mit/librock_fdio.c"
 
 #   if defined librock_WANT_BRANCH_COVERAGE
 //Must be last in the single compilation unit, because it #undefs malloc
-#   include "tests/awsFillAndSignCoverage.c"
+#   include "tests/fillAndSignCoverage.c"
 #   endif
 
-#endif //defined(LIBROCK_AWSFILLANDSIGN_MAIN)
+#endif //defined(LIBROCK_FILLANDSIGN_MAIN)
