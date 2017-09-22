@@ -31,7 +31,7 @@ Windows, and GCC on Linux and *BSD:
     #	define LIBROCK_WANT_GETENV_S_FOR_MSC_VER
     #endif
 */
-
+#undef LIBROCK_WANT_INCLUDE_PTHREAD
 #if defined LIBROCK_WANT_INCLUDE_PTHREAD
 //gmtime_r is a compatibility macro in pthread.h for CodeBlocks MinGW
 #   include <pthread.h>
