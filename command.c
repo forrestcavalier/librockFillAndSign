@@ -835,6 +835,11 @@ int main_list(int argc, char **argv)
     return 0;
 
 }
+void gmtime_r(time_t *now, struct tm *gmt)
+{
+    *gmt = *gmtime(now);
+}
+
 int main(int argc, char **argv)
 {
     //char *credentialregion = 0;
