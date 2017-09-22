@@ -63,8 +63,10 @@
 #if !defined(PRIVATE)
 #define PRIVATE static
 #endif
+#define LIBROCK_singlethread_gmtime_r 1
 #define LIBROCK_WANT_GMTIME_R 1
 #include "u-librock/mit/fillAndSign.h"
+#define gmtime_r librock_singlethread_gmtime_r
 
 #   include <stdio.h> /* fwrite, fprintf */
 #   include <fcntl.h>
