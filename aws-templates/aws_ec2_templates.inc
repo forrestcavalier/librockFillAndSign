@@ -2,16 +2,15 @@
    to use the REST API of the "Elastic Compute Cloud" (EC2)
    at Amazon Web Services.
    
- Copyright 2016 MIB SOFTWARE, INC. 
+ Copyright 2017 MIB SOFTWARE, INC. 
 	NOTE from the copyright holder: Since templates are
 	functional, there is minimal copyrightable matter
 	contained in these templates.
    
  LICENSE:   MIT (Free/OpenSource)
  
- STABILITY: UNSTABLE as of 2016-11-22
-            Be sure to compile with -DLIBROCK_UNSTABLE.
-            Check for updates at: https://github.com/forrestcavalier/awsFillAndSign
+ STABILITY: Items outside comments are STABLE as of 2017-06-21
+            Check for updates at: https://github.com/forrestcavalier/librockFillAndSign
               
  SUPPORT:   Contact the author for commercial support and consulting at
             http://www.mibsoftware.com/
@@ -24,8 +23,8 @@
     "\n""@// REST API DOCS: http://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeInstances.html"
     "\n""@// TEMPLATE PARAMETERS:  None"
     "\n""@//.default.AWS_SERVICE_NAME=ec2"
-    "\n""POST https://ec2.amazonaws.com/ HTTP/1.1"
-    "\n""Host:ec2.amazonaws.com"
+    "\n""POST https://ec2@eAWS_REGION_NOT_USEAST1@.amazonaws.com/ HTTP/1.1"
+    "\n""Host:ec2@eAWS_REGION_NOT_USEAST1@.amazonaws.com"
     "\n"
 	"\n""Action=DescribeInstances&Version=2016-09-15"
 
@@ -34,8 +33,8 @@
     "\n""@// REST API DOCS: http://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeKeyPairs.html"
     "\n""@// TEMPLATE PARAMETERS:  None"
     "\n""@//.default.AWS_SERVICE_NAME=ec2"
-    "\n""POST https://ec2.amazonaws.com/ HTTP/1.1"
-    "\n""Host:ec2.amazonaws.com"
+    "\n""POST https://ec2@eAWS_REGION_NOT_USEAST1@.amazonaws.com/ HTTP/1.1"
+    "\n""Host:ec2@eAWS_REGION_NOT_USEAST1@.amazonaws.com"
     "\n"
 	"\n""Action=DescribeKeyPairs&Version=2016-09-15"
     
@@ -54,13 +53,35 @@
     "\n""@// REST API DOCS: http://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeSecurityGroups.html"
     "\n""@// TEMPLATE PARAMETERS:  None"
     "\n""@//.default.AWS_SERVICE_NAME=ec2"
-    "\n""POST https://ec2.amazonaws.com/ HTTP/1.1"
-    "\n""Host:ec2.amazonaws.com"
+    "\n""POST https://ec2@eAWS_REGION_NOT_USEAST1@.amazonaws.com/ HTTP/1.1"
+    "\n""Host:ec2@eAWS_REGION_NOT_USEAST1@.amazonaws.com"
     "\n"
     "\n""Action=DescribeSecurityGroups&Version=2016-09-15"
 
+	
+,"@//aws-ec2-start-instance;2017-06-21;MIB SOFTWARE, INC;MIT (Free/Open source, No Warranty)"
+	"\n""@// TEMPLATE FOR:  AWS EC2 StartInstances"
+	"\n""@// REST API DOCS: http://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_StartInstances.html"
+    "\n""@//   @1_instance_id@ - ID of instance"
+    "\n""@//.default.AWS_SERVICE_NAME=ec2"
+    "\n""POST https://ec2@eAWS_REGION_NOT_USEAST1@.amazonaws.com/ HTTP/1.1"
+    "\n""Host:ec2@eAWS_REGION_NOT_USEAST1@.amazonaws.com"
+    "\n"
+    "\n""Action=StartInstances&Version=2016-09-15"
+	"&InstanceId.1=@1_instance_id@"
 
-/*	
+,"@//aws-ec2-stop-instance;2017-06-21;MIB SOFTWARE, INC;MIT (Free/Open source, No Warranty)"
+	"\n""@// TEMPLATE FOR:  AWS EC2 StopInstances"
+	"\n""@// REST API DOCS: http://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_StopInstances.html"
+    "\n""@//   @1_instance_id@ - ID of instance"
+    "\n""@//.default.AWS_SERVICE_NAME=ec2"
+    "\n""POST https://ec2@eAWS_REGION_NOT_USEAST1@.amazonaws.com/ HTTP/1.1"
+    "\n""Host:ec2@eAWS_REGION_NOT_USEAST1@.amazonaws.com"
+    "\n"
+    "\n""Action=StopInstances&Version=2016-09-15"
+	"&InstanceId.1=@1_instance_id@"
+
+/* Everything below is commented
 	
 Account Attributes
 
@@ -729,42 +750,7 @@ Instances
 "\n""data="Action=RunInstances&Version=2016-09-15\""
     "\n""header = \"host:ec2.amazonaws.com\""
     "\n""header = \"Authorization: AWS4-HMAC-SHA256 Credential=...,SignedHeaders=...,Signature=... (all will be replaced)\""
-
-,"@//aws-ec2-StartInstances"
-"\n""@// TEMPLATE FOR:  AWS EC2 StartInstances"
-"\n""@// REST API DOCS: http://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_StartInstances.html"
-    "\n""@//"
-    "\n""@// TEMPLATE REVISION:    2016-11-26 by MIB SOFTWARE, INC."
-    "\n""@// TEMPLATE LICENSE:     MIT (Free/Open Source)"
-    "\n""@// TEMPLATE PARAMETERS:  None"
-    "\n""@//"
-    "\n""@// (Use awsFillAndSign by MIB SOFTWARE to fill the template, strip comments,"
-    "\n""@// and add AWS Signatures before using CURL. IMPORTANT: use the -bs command"
-    "\n""@// line flag to compute the SHA256 signature of the POST data.)"
-    "\n""request = \"POST\""
-    "\n""@//.default.AWS_SERVICE_NAME=ec2"
-    "\n""url=\"https://ec2.amazonaws.com/\""
-"\n""data="Action=StartInstances&Version=2016-09-15\""
-    "\n""header = \"host:ec2.amazonaws.com\""
-    "\n""header = \"Authorization: AWS4-HMAC-SHA256 Credential=...,SignedHeaders=...,Signature=... (all will be replaced)\""
-
-,"@//aws-ec2-StopInstances"
-"\n""@// TEMPLATE FOR:  AWS EC2 StopInstances"
-"\n""@// REST API DOCS: http://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_StopInstances.html"
-    "\n""@//"
-    "\n""@// TEMPLATE REVISION:    2016-11-26 by MIB SOFTWARE, INC."
-    "\n""@// TEMPLATE LICENSE:     MIT (Free/Open Source)"
-    "\n""@// TEMPLATE PARAMETERS:  None"
-    "\n""@//"
-    "\n""@// (Use awsFillAndSign by MIB SOFTWARE to fill the template, strip comments,"
-    "\n""@// and add AWS Signatures before using CURL. IMPORTANT: use the -bs command"
-    "\n""@// line flag to compute the SHA256 signature of the POST data.)"
-    "\n""request = \"POST\""
-    "\n""@//.default.AWS_SERVICE_NAME=ec2"
-    "\n""url=\"https://ec2.amazonaws.com/\""
-"\n""data="Action=StopInstances&Version=2016-09-15\""
-    "\n""header = \"host:ec2.amazonaws.com\""
-    "\n""header = \"Authorization: AWS4-HMAC-SHA256 Credential=...,SignedHeaders=...,Signature=... (all will be replaced)\""
+(all will be replaced)\""
 
 ,"@//aws-ec2-TerminateInstances"
 "\n""@// TEMPLATE FOR:  AWS EC2 TerminateInstances"
@@ -820,24 +806,6 @@ Regions and Availability Zones
     "\n""@//.default.AWS_SERVICE_NAME=ec2"
     "\n""url=\"https://ec2.amazonaws.com/\""
 "\n""data="Action=DescribeAvailabilityZones&Version=2016-09-15\""
-    "\n""header = \"host:ec2.amazonaws.com\""
-    "\n""header = \"Authorization: AWS4-HMAC-SHA256 Credential=...,SignedHeaders=...,Signature=... (all will be replaced)\""
-
-,"@//aws-ec2-DescribeRegions"
-"\n""@// TEMPLATE FOR:  AWS EC2 DescribeRegions"
-"\n""@// REST API DOCS: http://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeRegions.html"
-    "\n""@//"
-    "\n""@// TEMPLATE REVISION:    2016-11-26 by MIB SOFTWARE, INC."
-    "\n""@// TEMPLATE LICENSE:     MIT (Free/Open Source)"
-    "\n""@// TEMPLATE PARAMETERS:  None"
-    "\n""@//"
-    "\n""@// (Use awsFillAndSign by MIB SOFTWARE to fill the template, strip comments,"
-    "\n""@// and add AWS Signatures before using CURL. IMPORTANT: use the -bs command"
-    "\n""@// line flag to compute the SHA256 signature of the POST data.)"
-    "\n""request = \"POST\""
-    "\n""@//.default.AWS_SERVICE_NAME=ec2"
-    "\n""url=\"https://ec2.amazonaws.com/\""
-"\n""data="Action=DescribeRegions&Version=2016-09-15\""
     "\n""header = \"host:ec2.amazonaws.com\""
     "\n""header = \"Authorization: AWS4-HMAC-SHA256 Credential=...,SignedHeaders=...,Signature=... (all will be replaced)\""
 
